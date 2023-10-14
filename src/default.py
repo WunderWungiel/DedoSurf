@@ -4,6 +4,7 @@ import urllib2
 import graphics
 import os
 import re
+import sysinfo
 from pydedomilapi import get_resolutions, get_app_info, search, retrieve_games
 
 dl_path = None
@@ -26,6 +27,8 @@ if not os.path.isdir(dl_path):
 if not os.path.isdir(os.path.join(dl_path, "screenshots")):
     os.mkdir(os.path.join(dl_path, "screenshots"))
 
+device_res = 'x'.join([str(res) for res in sysinfo.display_pixels()]) # One liner to grab resolution of device into string in <x>x<y> format
+
 class GameDescriptionView(appuifw.View):
     def __init__(self, gameinfo):
         appuifw.View.__init__(self)
@@ -41,7 +44,7 @@ class GameDescriptionView(appuifw.View):
                 
         # View Properties
         self.exit_key_text = u"Back"
-        self.menu = [(u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+        self.menu = default_menu
         self.set_tabs([u"Info", u"Screenshots", u"Description", u"Links"], self.handle_tab)
         self.title = u'Info | %s' % self.app_title
         self.body = self.app_simple_info()
@@ -110,6 +113,8 @@ class GameDescriptionView(appuifw.View):
             links_links = []
 
             for key, value in links.items():
+                if description_ref.app_title in key:
+                    key = key.replace(description_ref.app_title, '').strip()
                 links_names.append(key)
                 links_links.append(value.get('link'))
 
@@ -172,23 +177,31 @@ class OpenByLink:
         link = appuifw.query(u"Input Dedomil Game link", "text")
         if not link:
             return
-        appuifw.app.view = self.GameResolutionsView(link)
+
+        game_resolutions = get_resolutions(link)
+        resolutions_names = []
+        resolutions_links = []
+        for key, value in game_resolutions.items():
+            resolutions_names.append(key)
+            resolutions_links.append(value)
+        if device_res in resolutions_names:
+            gameinfo = get_app_info(resolutions_links[resolutions_names.index(device_res)])
+            game_description_view = GameDescriptionView(gameinfo)
+            appuifw.app.view = game_description_view
+        else:
+            game_resolutions_view = self.GameResolutionsView(resolutions_names, resolutions_links)
+            appuifw.app.view = game_resolutions_view
+
     class GameResolutionsView(appuifw.View):
-        def __init__(self, link):
+        def __init__(self, resolutions_names, resolutions_links):
             appuifw.View.__init__(self)
 
-            game_resolutions = get_resolutions(link)
-            resolutions_names = []
-            resolutions_links = []
-            for key, value in game_resolutions.items():
-                resolutions_names.append(key)
-                resolutions_links.append(value)
             self.resolutions_names = resolutions_names
             self.resolutions_links = resolutions_links
 
             # View Properties
             self.exit_key_text = u'Back'
-            self.menu = [(u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+            self.menu = default_menu
             self.title = u'Resolutions'
             self.body = self.run()
             # End of View Properties
@@ -228,7 +241,7 @@ class App1:
                 appuifw.note(u"Query should be 3-digits or longer", "error")
                 return
             search_results_view = self.SearchResultsView(query)
-            if not search_results_view:
+            if not search_results_view.results:
                 return
             appuifw.app.view = search_results_view
 
@@ -249,10 +262,12 @@ class App1:
     class SearchResultsView(appuifw.View):
         def __init__(self, query):
             appuifw.View.__init__(self)
-            
+
+            self.results = True
             results = search(query)
             if not results.results:
                 appuifw.note(u"No results!")
+                self.results = False
                 return
             
             names = []
@@ -283,10 +298,10 @@ class App1:
                 pages = False
 
             if pages:
-                self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page), (u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page)] + default_menu
                 self.title = u"Search results | %d" % self.current_page[0]
             else:
-                self.menu = [(u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                self.menu = default_menu
                 self.title = u'Search results'
             self.body = self.run()
             # End of View Properties
@@ -330,16 +345,16 @@ class App1:
 
             # View Properties
             if pages and self.current_page[0] != self.last_page[0] and self.current_page[0] != self.first_page[0]:
-                self.menu = [(u"Next page", self.fetch_next_page), (u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page), (u"Last page", self.fetch_last_page), (u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                self.menu = [(u"Next page", self.fetch_next_page), (u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page), (u"Last page", self.fetch_last_page)] + default_menu
                 self.title = u"Search results | %d" % self.current_page[0]
             elif pages and self.current_page[0] == self.first_page[0]:
-                self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page), (u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page)] + default_menu
                 self.title = u"Search results | %d" % self.current_page[0]
             elif pages and self.current_page[0] == self.last_page[0]:
-                self.menu = [(u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page), (u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                self.menu = [(u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page)] + default_menu
                 self.title = u"Search results | %d" % self.current_page[0]
             else:
-                self.menu = [(u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                self.menu = default_menu
                 self.title = u'Search results'
             self.body = self.run()
             # End of View Properties
@@ -355,29 +370,35 @@ class App1:
 
         def handler(self):
             index = self.results_app.current()
-            game_resolutions_view = self.GameResolutionsView(self.results_links[index])
-            appuifw.app.view = game_resolutions_view
+
+            game_resolutions = get_resolutions(self.results_links[index])
+            resolutions_names = []
+            resolutions_links = []
+            for key, value in game_resolutions.items():
+                resolutions_names.append(key)
+                resolutions_links.append(value)
+            if device_res in resolutions_names:
+                gameinfo = get_app_info(resolutions_links[resolutions_names.index(device_res)])
+                game_description_view = GameDescriptionView(gameinfo)
+                appuifw.app.view = game_description_view
+            else:
+                game_resolutions_view = self.GameResolutionsView(resolutions_names, resolutions_links)
+                appuifw.app.view = game_resolutions_view
 
         def run(self):
             self.results_app = appuifw.Listbox(self.results_names, self.handler)
             return self.results_app
 
         class GameResolutionsView(appuifw.View):
-            def __init__(self, link):
+            def __init__(self, resolutions_names, resolutions_links):
                 appuifw.View.__init__(self)
 
-                game_resolutions = get_resolutions(link)
-                resolutions_names = []
-                resolutions_links = []
-                for key, value in game_resolutions.items():
-                    resolutions_names.append(key)
-                    resolutions_links.append(value)
                 self.resolutions_names = resolutions_names
                 self.resolutions_links = resolutions_links
 
                 # View Properties
                 self.exit_key_text = u'Back'
-                self.menu = [(u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                self.menu = default_menu
                 self.title = u'Resolutions'
                 self.body = self.run()
                 # End of View Properties
@@ -424,10 +445,10 @@ class App1:
                 pages = False
 
             if pages:
-                self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page), (u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page)] + default_menu
                 self.title = u"Vendors | %d" % self.current_page[0]
             else:
-                self.menu = [(u"Open by link", open_by_link.run), (u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                self.menu = [(u"Open by link", open_by_link.run)] + default_menu
                 self.title = u'Vendors'
             self.body = self.run()
             # End of View Properties
@@ -472,16 +493,16 @@ class App1:
 
             # View Properties
             if pages and self.current_page[0] != self.last_page[0] and self.current_page[0] != self.first_page[0]:
-                self.menu = [(u"Next page", self.fetch_next_page), (u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page), (u"Last page", self.fetch_last_page), (u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                self.menu = [(u"Next page", self.fetch_next_page), (u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page), (u"Last page", self.fetch_last_page)] + default_menu
                 self.title = u"Vendors | %d" % self.current_page[0]
             elif pages and self.current_page[0] == self.first_page[0]:
-                self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page), (u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page)] + default_menu
                 self.title = u"Vendors | %d" % self.current_page[0]
             elif pages and self.current_page[0] == self.last_page[0]:
-                self.menu = [(u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page), (u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                self.menu = [(u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page)] + default_menu
                 self.title = u"Vendors | %d" % self.current_page[0]
             else:
-                self.menu = [(u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                self.menu = default_menu
                 self.title = u'Vendors'
             self.body = self.run()
             # End of View Properties
@@ -543,10 +564,10 @@ class App1:
                     pages = False
 
                 if pages:
-                    self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page), (u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                    self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page)] + default_menu
                     self.title = u"%s | %d" % (vendors_ref.vendor_title, self.current_page[0])
                 else:
-                    self.menu = [(u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                    self.menu = default_menu
                     self.title = u'%s' % vendors_ref.vendor_title
                 self.body = self.run()
                 # End of View Properties
@@ -591,16 +612,16 @@ class App1:
 
                 # View Properties
                 if pages and self.current_page[0] != self.last_page[0] and self.current_page[0] != self.first_page[0]:
-                    self.menu = [(u"Next page", self.fetch_next_page), (u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page), (u"Last page", self.fetch_last_page), (u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                    self.menu = [(u"Next page", self.fetch_next_page), (u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page), (u"Last page", self.fetch_last_page)] + default_menu
                     self.title = u"%s | %d" % (self.vendors_ref.vendor_title, self.current_page[0])
                 elif pages and self.current_page[0] == self.first_page[0]:
-                    self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page), (u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                    self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page)] + default_menu
                     self.title = u"%s | %d" % (self.vendors_ref.vendor_title, self.current_page[0])
                 elif pages and self.current_page[0] == self.last_page[0]:
-                    self.menu = [(u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page), (u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                    self.menu = [(u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page)] + default_menu
                     self.title = u"%s | %d" % (self.vendors_ref.vendor_title, self.current_page[0])
                 else:
-                    self.menu = [(u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                    self.menu = default_menu
                     self.title = u'%s' % (self.vendors_ref.vendor_title)
                 self.body = self.run()
                 # End of View Properties
@@ -618,35 +639,35 @@ class App1:
                 index = self.vendor_app.current()
                 link = self.games_links[index]
 
-                game_resolutions_view = self.vendors_ref.GameResolutionsView(link, vendors_ref=self.vendors_ref, vendor_ref=self)
-                appuifw.app.view = game_resolutions_view
-
-            def run(self):
-                self.vendor_app = appuifw.Listbox(self.games_names, self.handler)
-                return self.vendor_app
-
-        class GameResolutionsView(appuifw.View):
-            def __init__(self, link, vendors_ref, vendor_ref):
-
-                appuifw.View.__init__(self)
-
-                self.vendor_ref = vendor_ref
-                self.vendor_app = vendor_ref.vendor_app
-                self.vendors_ref = vendors_ref
-                self.vendors_app = vendors_ref.vendors_app
                 game_resolutions = get_resolutions(link)
                 resolutions_names = []
                 resolutions_links = []
                 for key, value in game_resolutions.items():
                     resolutions_names.append(key)
                     resolutions_links.append(value)
+                if device_res in resolutions_names:
+                    gameinfo = get_app_info(resolutions_links[resolutions_names.index(device_res)])
+                    game_description_view = GameDescriptionView(gameinfo)
+                    appuifw.app.view = game_description_view
+                else:
+                    game_resolutions_view = self.vendors_ref.GameResolutionsView(resolutions_names, resolutions_links)
+                    appuifw.app.view = game_resolutions_view
+
+            def run(self):
+                self.vendor_app = appuifw.Listbox(self.games_names, self.handler)
+                return self.vendor_app
+
+        class GameResolutionsView(appuifw.View):
+            def __init__(self, resolutions_names, resolutions_links):
+                appuifw.View.__init__(self)
+
                 self.resolutions_names = resolutions_names
                 self.resolutions_links = resolutions_links
 
                 # View Properties
 
                 self.exit_key_text = u"Back"
-                self.menu = [(u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                self.menu = default_menu
                 self.title = u'Resolutions'
                 self.body = self.run()
 
@@ -682,7 +703,7 @@ class App1:
 
             # View Properties
             self.title = u"Resolutions"
-            self.menu = [(u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+            self.menu = default_menu
             self.exit_key_text = u"Back"
             self.body = self.run()
             # End of View Properties
@@ -736,10 +757,10 @@ class App1:
                     pages = False
 
                 if pages:
-                    self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page), (u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                    self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page)] + default_menu
                     self.title = u"%s | %d" % (self.name, self.current_page[0])
                 else:
-                    self.menu = [(u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                    self.menu = default_menu
                     self.title = u'%s' % self.name
                 self.body = self.run()
                 # End of View Properties
@@ -785,16 +806,16 @@ class App1:
 
                 # View Properties
                 if pages and self.current_page[0] != self.last_page[0] and self.current_page[0] != self.first_page[0]:
-                    self.menu = [(u"Next page", self.fetch_next_page), (u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page), (u"Last page", self.fetch_last_page), (u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                    self.menu = [(u"Next page", self.fetch_next_page), (u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page), (u"Last page", self.fetch_last_page)] + default_menu
                     self.title = u"%s | %d" % (self.name, self.current_page[0])
                 elif pages and self.current_page[0] == self.first_page[0]:
-                    self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page), (u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                    self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page)] + default_menu
                     self.title = u"%s | %d" % (self.name, self.current_page[0])
                 elif pages and self.current_page[0] == self.last_page[0]:
-                    self.menu = [(u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page), (u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                    self.menu = [(u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page)] + default_menu
                     self.title = u"%s | %d" % (self.name, self.current_page[0])
                 else:
-                    self.menu = [(u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                    self.menu = default_menu
                     self.title = u'%s' % self.name
                 self.body = self.run()
                 # End of View Properties
@@ -831,13 +852,21 @@ class App1:
             for key, value in resolutions_list.results.items():
                 resolutions_names.append(key)
                 resolutions_links.append(value.get("link"))
+            if u"All resolutions" in resolutions_names:
+                _current_index = resolutions_names.index(u"All resolutions")
+                _all_res_link = resolutions_links[_current_index]
+                _new_index = 0
+                resolutions_names.pop(_current_index)
+                resolutions_links.pop(_current_index)
+                resolutions_names.insert(_new_index, u"All resolutions")
+                resolutions_links.insert(_new_index, _all_res_link)
             
             self.resolutions_names = resolutions_names
             self.resolutions_links = resolutions_links
 
             # View Properties
             self.title = u"Nokia Games"
-            self.menu = [(u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+            self.menu = default_menu
             self.exit_key_text = u"Back"
             self.body = self.run()
             # End of View Properties
@@ -891,10 +920,10 @@ class App1:
                     pages = False
 
                 if pages:
-                    self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page), (u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                    self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page)] + default_menu
                     self.title = u"%s | %d" % (self.name, self.current_page[0])
                 else:
-                    self.menu = [(u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                    self.menu = default_menu
                     self.title = u'%s' % self.name
                 self.body = self.run()
                 # End of View Properties
@@ -940,16 +969,16 @@ class App1:
 
                 # View Properties
                 if pages and self.current_page[0] != self.last_page[0] and self.current_page[0] != self.first_page[0]:
-                    self.menu = [(u"Next page", self.fetch_next_page), (u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page), (u"Last page", self.fetch_last_page), (u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                    self.menu = [(u"Next page", self.fetch_next_page), (u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page), (u"Last page", self.fetch_last_page)] + default_menu
                     self.title = u"%s | %d" % (self.name, self.current_page[0])
                 elif pages and self.current_page[0] == self.first_page[0]:
-                    self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page), (u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                    self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page)] + default_menu
                     self.title = u"%s | %d" % (self.name, self.current_page[0])
                 elif pages and self.current_page[0] == self.last_page[0]:
-                    self.menu = [(u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page), (u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                    self.menu = [(u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page)] + default_menu
                     self.title = u"%s | %d" % (self.name, self.current_page[0])
                 else:
-                    self.menu = [(u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+                    self.menu = default_menu
                     self.title = u'%s' % self.name
                 self.body = self.run()
                 # End of View Properties
@@ -1015,7 +1044,8 @@ def exit_key_handler():
 
 app_lock = e32.Ao_lock()
 file_opener = appuifw.Content_handler()
-appuifw.app.menu = [(u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+default_menu = [(u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+appuifw.app.menu = default_menu
 appuifw.app.set_tabs([u"Functions", u"About"], handle_tab)
 appuifw.app.title = u'DedoSurf'
 appuifw.app.screen = "normal"
