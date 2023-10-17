@@ -5,19 +5,20 @@ import graphics
 import os
 import re
 import sysinfo
+import zipfile
 from pydedomilapi import get_resolutions, get_app_info, search, retrieve_games
 
 dl_path = None
 while not dl_path:
     try:
         if os.path.isdir("F:\\"):
-            dl_path="F:\\Dedomil"
+            dl_path = "F:\\Dedomil"
     except OSError:
         pass
     if os.path.isdir("E:\\"):
-        dl_path="E:\\Dedomil"
+        dl_path = "E:\\Dedomil"
     elif os.path.isdir("C:\\"):
-        dl_path="C:\\data\\Dedomil"
+        dl_path = "C:\\data\\Dedomil"
     else:
         appuifw.note(u"No disk available!", "error")
         exit_key_handler()
@@ -27,7 +28,8 @@ if not os.path.isdir(dl_path):
 if not os.path.isdir(os.path.join(dl_path, "screenshots")):
     os.mkdir(os.path.join(dl_path, "screenshots"))
 
-device_res = 'x'.join([str(res) for res in sysinfo.display_pixels()]) # One liner to grab resolution of device into string in <x>x<y> format
+# One liner to grab resolution of device into string in <width>x<height> format
+device_res = 'x'.join([str(res) for res in sysinfo.display_pixels()])
 
 class GameDescriptionView(appuifw.View):
     def __init__(self, gameinfo):
@@ -60,9 +62,10 @@ class GameDescriptionView(appuifw.View):
         simple_info_app.add("\n\nDownloads: %s" % self.counter)
         simple_info_app.add("\n\nVendor: %s" % self.vendor)
         return simple_info_app
+
     def app_description(self):
         description_app = appuifw.Text(scrollbar=True, skinned=True)
-        description_app.font = (u"Nokia Sans S60", 10)
+        description_app.font = (u"Nokia Sans S60", 13)
         description_app.add("\n\nDescription: %s" % self.description)
         return description_app
 
@@ -82,6 +85,7 @@ class GameDescriptionView(appuifw.View):
 
         def handle_redraw(self, rect):
             self.screenshots_app.blit(self.myimage, scale=self.scale)
+
         def run(self):
             self.myimage = graphics.Image.open(self.path)
             self.screenshots_app = appuifw.Canvas(event_callback=None, redraw_callback=self.handle_redraw)
@@ -120,6 +124,7 @@ class GameDescriptionView(appuifw.View):
 
             self.links_names = links_names
             self.links_links = links_links
+
         def handler(self):
             index = self.download_app.current()
             link = self.links_links[index]
@@ -145,7 +150,32 @@ class GameDescriptionView(appuifw.View):
                 f.write(chunk)
             f.close()
 
-            file_opener.open(path)
+            full_jar_path = None
+            interrupted = False
+            if filename.endswith(".zip"):
+                zip_file = zipfile.ZipFile(path, 'r')
+                for name in zip_file.namelist():
+                    if name.endswith(".jar"):
+                        zip_file.close()
+                        full_jar_path = os.path.join(dl_path, name)
+                        extracted = open(full_jar_path, "wb")
+                        try:
+                            extracted.write(zip_file.read(name))
+                        except MemoryError:
+                            interrupted = True
+                            break
+                        finally:
+                            extracted.close()
+                        break
+            if interrupted:
+                os.remove(full_jar_path)
+                file_opener.open(path)
+            elif not full_jar_path and not interrupted:
+                zip_file.close()
+                file_opener.open(path)
+            elif full_jar_path and not interrupted:
+                os.remove(path)
+                file_opener.open(full_jar_path)
 
         def run(self):
             self.download_app = appuifw.Listbox(self.links_names, self.handler)
@@ -172,6 +202,7 @@ def close_all_views():
 class OpenByLink:
     def __init__(self):
         pass
+
     def run(self):
         close_all_views()
         link = appuifw.query(u"Input Dedomil Game link", "text")
@@ -237,7 +268,7 @@ class App1:
             if not query:
                 return
 
-            if not len(query) >= 3:
+            if not len(query) > 3:
                 appuifw.note(u"Query should be 3-digits or longer", "error")
                 return
             search_results_view = self.SearchResultsView(query)
@@ -253,7 +284,10 @@ class App1:
             appuifw.app.view = resolutions_view
         elif index == 3:
             nokia_games_view = self.NokiaGames(self.entries_links[index])
-            appuifw.app.view = nokia_games_view
+            if nokia_games_view.skip_res:
+                return
+            else:
+                appuifw.app.view = nokia_games_view
 
     def run(self):
         self.app1 = appuifw.Listbox(self.entries, self.handler)
@@ -298,7 +332,9 @@ class App1:
                 pages = False
 
             if pages:
-                self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page)] + default_menu
+                self.menu = [
+                                (u"Next page", self.fetch_next_page),
+                                (u"Last page", self.fetch_last_page)] + default_menu
                 self.title = u"Search results | %d" % self.current_page[0]
             else:
                 self.menu = default_menu
@@ -345,13 +381,24 @@ class App1:
 
             # View Properties
             if pages and self.current_page[0] != self.last_page[0] and self.current_page[0] != self.first_page[0]:
-                self.menu = [(u"Next page", self.fetch_next_page), (u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page), (u"Last page", self.fetch_last_page)] + default_menu
+                self.menu = [
+                                (u"Next page", self.fetch_next_page),
+                                (u"First page", self.fetch_first_page),
+                                (u"Previous page", self.fetch_previous_page),
+                                (u"Last page", self.fetch_last_page)
+                            ] + default_menu
                 self.title = u"Search results | %d" % self.current_page[0]
             elif pages and self.current_page[0] == self.first_page[0]:
-                self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page)] + default_menu
+                self.menu = [
+                                (u"Next page", self.fetch_next_page),
+                                (u"Last page", self.fetch_last_page)
+                            ] + default_menu
                 self.title = u"Search results | %d" % self.current_page[0]
             elif pages and self.current_page[0] == self.last_page[0]:
-                self.menu = [(u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page)] + default_menu
+                self.menu = [
+                                (u"First page", self.fetch_first_page),
+                                (u"Previous page", self.fetch_previous_page)
+                            ] + default_menu
                 self.title = u"Search results | %d" % self.current_page[0]
             else:
                 self.menu = default_menu
@@ -361,10 +408,13 @@ class App1:
 
         def fetch_next_page(self):
             self.fetch_page(action="next")
+
         def fetch_previous_page(self):
             self.fetch_page(action="previous")
+
         def fetch_first_page(self):
             self.fetch_page(action="first")
+
         def fetch_last_page(self):
             self.fetch_page(action="last")
 
@@ -445,7 +495,10 @@ class App1:
                 pages = False
 
             if pages:
-                self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page)] + default_menu
+                self.menu = [
+                                (u"Next page", self.fetch_next_page),
+                                (u"Last page", self.fetch_last_page)
+                            ] + default_menu
                 self.title = u"Vendors | %d" % self.current_page[0]
             else:
                 self.menu = [(u"Open by link", open_by_link.run)] + default_menu
@@ -493,13 +546,21 @@ class App1:
 
             # View Properties
             if pages and self.current_page[0] != self.last_page[0] and self.current_page[0] != self.first_page[0]:
-                self.menu = [(u"Next page", self.fetch_next_page), (u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page), (u"Last page", self.fetch_last_page)] + default_menu
+                self.menu = [
+                                (u"Next page", self.fetch_next_page),
+                                (u"First page", self.fetch_first_page),
+                                (u"Previous page", self.fetch_previous_page),
+                                (u"Last page", self.fetch_last_page)
+                            ] + default_menu
                 self.title = u"Vendors | %d" % self.current_page[0]
             elif pages and self.current_page[0] == self.first_page[0]:
                 self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page)] + default_menu
                 self.title = u"Vendors | %d" % self.current_page[0]
             elif pages and self.current_page[0] == self.last_page[0]:
-                self.menu = [(u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page)] + default_menu
+                self.menu = [
+                                (u"First page", self.fetch_first_page),
+                                (u"Previous page", self.fetch_previous_page)
+                            ] + default_menu
                 self.title = u"Vendors | %d" % self.current_page[0]
             else:
                 self.menu = default_menu
@@ -509,10 +570,13 @@ class App1:
 
         def fetch_next_page(self):
             self.fetch_page(action="next")
+
         def fetch_previous_page(self):
             self.fetch_page(action="previous")
+
         def fetch_first_page(self):
             self.fetch_page(action="first")
+
         def fetch_last_page(self):
             self.fetch_page(action="last")
 
@@ -564,7 +628,10 @@ class App1:
                     pages = False
 
                 if pages:
-                    self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page)] + default_menu
+                    self.menu = [
+                                    (u"Next page", self.fetch_next_page),
+                                    (u"Last page", self.fetch_last_page)
+                                ] + default_menu
                     self.title = u"%s | %d" % (vendors_ref.vendor_title, self.current_page[0])
                 else:
                     self.menu = default_menu
@@ -612,26 +679,40 @@ class App1:
 
                 # View Properties
                 if pages and self.current_page[0] != self.last_page[0] and self.current_page[0] != self.first_page[0]:
-                    self.menu = [(u"Next page", self.fetch_next_page), (u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page), (u"Last page", self.fetch_last_page)] + default_menu
+                    self.menu = [
+                                    (u"Next page", self.fetch_next_page),
+                                    (u"First page", self.fetch_first_page),
+                                    (u"Previous page", self.fetch_previous_page),
+                                    (u"Last page", self.fetch_last_page)
+                                ] + default_menu
                     self.title = u"%s | %d" % (self.vendors_ref.vendor_title, self.current_page[0])
                 elif pages and self.current_page[0] == self.first_page[0]:
-                    self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page)] + default_menu
+                    self.menu = [
+                                    (u"Next page", self.fetch_next_page),
+                                    (u"Last page", self.fetch_last_page)
+                                ] + default_menu
                     self.title = u"%s | %d" % (self.vendors_ref.vendor_title, self.current_page[0])
                 elif pages and self.current_page[0] == self.last_page[0]:
-                    self.menu = [(u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page)] + default_menu
+                    self.menu = [
+                                    (u"First page", self.fetch_first_page),
+                                    (u"Previous page", self.fetch_previous_page)
+                                ] + default_menu
                     self.title = u"%s | %d" % (self.vendors_ref.vendor_title, self.current_page[0])
                 else:
                     self.menu = default_menu
-                    self.title = u'%s' % (self.vendors_ref.vendor_title)
+                    self.title = u'%s' % self.vendors_ref.vendor_title
                 self.body = self.run()
                 # End of View Properties
 
             def fetch_next_page(self):
                 self.fetch_page(action="next")
+
             def fetch_previous_page(self):
                 self.fetch_page(action="previous")
+
             def fetch_first_page(self):
                 self.fetch_page(action="first")
+
             def fetch_last_page(self):
                 self.fetch_page(action="last")
 
@@ -672,7 +753,6 @@ class App1:
                 self.body = self.run()
 
                 # End of View Properties
-                
 
             def handler(self):
                 index = self.resolutions_app.current()
@@ -757,7 +837,10 @@ class App1:
                     pages = False
 
                 if pages:
-                    self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page)] + default_menu
+                    self.menu = [
+                                    (u"Next page", self.fetch_next_page),
+                                    (u"Last page", self.fetch_last_page)
+                                ] + default_menu
                     self.title = u"%s | %d" % (self.name, self.current_page[0])
                 else:
                     self.menu = default_menu
@@ -806,13 +889,24 @@ class App1:
 
                 # View Properties
                 if pages and self.current_page[0] != self.last_page[0] and self.current_page[0] != self.first_page[0]:
-                    self.menu = [(u"Next page", self.fetch_next_page), (u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page), (u"Last page", self.fetch_last_page)] + default_menu
+                    self.menu = [
+                                    (u"Next page", self.fetch_next_page),
+                                    (u"First page", self.fetch_first_page),
+                                    (u"Previous page", self.fetch_previous_page),
+                                    (u"Last page", self.fetch_last_page)
+                                ] + default_menu
                     self.title = u"%s | %d" % (self.name, self.current_page[0])
                 elif pages and self.current_page[0] == self.first_page[0]:
-                    self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page)] + default_menu
+                    self.menu = [
+                                    (u"Next page", self.fetch_next_page),
+                                    (u"Last page", self.fetch_last_page)
+                                ] + default_menu
                     self.title = u"%s | %d" % (self.name, self.current_page[0])
                 elif pages and self.current_page[0] == self.last_page[0]:
-                    self.menu = [(u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page)] + default_menu
+                    self.menu = [
+                                    (u"First page", self.fetch_first_page),
+                                    (u"Previous page", self.fetch_previous_page)
+                                ] + default_menu
                     self.title = u"%s | %d" % (self.name, self.current_page[0])
                 else:
                     self.menu = default_menu
@@ -822,10 +916,13 @@ class App1:
 
             def fetch_next_page(self):
                 self.fetch_page(action="next")
+
             def fetch_previous_page(self):
                 self.fetch_page(action="previous")
+
             def fetch_first_page(self):
                 self.fetch_page(action="first")
+
             def fetch_last_page(self):
                 self.fetch_page(action="last")
 
@@ -864,19 +961,26 @@ class App1:
             self.resolutions_names = resolutions_names
             self.resolutions_links = resolutions_links
 
-            # View Properties
-            self.title = u"Nokia Games"
-            self.menu = default_menu
-            self.exit_key_text = u"Back"
-            self.body = self.run()
-            # End of View Properties
+            self.skip_res = False
+            if device_res in resolutions_names:
+                link = resolutions_links[resolutions_names.index(device_res)]
+                resolution_view = self.ResolutionView(device_res, link)
+                self.skip_res = True
+                appuifw.app.view = resolution_view
+            else:
+                # View Properties
+                self.title = u"Nokia Games"
+                self.menu = default_menu
+                self.exit_key_text = u"Back"
+                self.body = self.run()
+                # End of View Properties
         
         def handler(self):
             index = self.resolutions_app.current()
             link = self.resolutions_links[index]
             self.name = self.resolutions_names[index]
 
-            resolution_view = self.ResolutionView(self.name, link, self)
+            resolution_view = self.ResolutionView(self.name, link)
             appuifw.app.view = resolution_view
 
         def run(self):
@@ -884,12 +988,10 @@ class App1:
             return self.resolutions_app
 
         class ResolutionView(appuifw.View):
-            def __init__(self, name, link, resolutions_ref):
+            def __init__(self, name, link):
                 appuifw.View.__init__(self)
 
                 self.name = name
-                self.resolutions_ref = resolutions_ref
-                self.resolutions_app = resolutions_ref.resolutions_app
                 games_list = retrieve_games(link)
                 self.games_list = games_list
 
@@ -920,7 +1022,10 @@ class App1:
                     pages = False
 
                 if pages:
-                    self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page)] + default_menu
+                    self.menu = [
+                                    (u"Next page", self.fetch_next_page),
+                                    (u"Last page", self.fetch_last_page)
+                                ] + default_menu
                     self.title = u"%s | %d" % (self.name, self.current_page[0])
                 else:
                     self.menu = default_menu
@@ -969,13 +1074,24 @@ class App1:
 
                 # View Properties
                 if pages and self.current_page[0] != self.last_page[0] and self.current_page[0] != self.first_page[0]:
-                    self.menu = [(u"Next page", self.fetch_next_page), (u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page), (u"Last page", self.fetch_last_page)] + default_menu
+                    self.menu = [
+                                    (u"Next page", self.fetch_next_page),
+                                    (u"First page", self.fetch_first_page),
+                                    (u"Previous page", self.fetch_previous_page),
+                                    (u"Last page", self.fetch_last_page)
+                                ] + default_menu
                     self.title = u"%s | %d" % (self.name, self.current_page[0])
                 elif pages and self.current_page[0] == self.first_page[0]:
-                    self.menu = [(u"Next page", self.fetch_next_page), (u"Last page", self.fetch_last_page)] + default_menu
+                    self.menu = [
+                                    (u"Next page", self.fetch_next_page),
+                                    (u"Last page", self.fetch_last_page)
+                                ] + default_menu
                     self.title = u"%s | %d" % (self.name, self.current_page[0])
                 elif pages and self.current_page[0] == self.last_page[0]:
-                    self.menu = [(u"First page", self.fetch_first_page), (u"Previous page", self.fetch_previous_page)] + default_menu
+                    self.menu = [
+                                    (u"First page", self.fetch_first_page),
+                                    (u"Previous page", self.fetch_previous_page)
+                                ] + default_menu
                     self.title = u"%s | %d" % (self.name, self.current_page[0])
                 else:
                     self.menu = default_menu
@@ -985,10 +1101,13 @@ class App1:
 
             def fetch_next_page(self):
                 self.fetch_page(action="next")
+
             def fetch_previous_page(self):
                 self.fetch_page(action="previous")
+
             def fetch_first_page(self):
                 self.fetch_page(action="first")
+
             def fetch_last_page(self):
                 self.fetch_page(action="last")
 
@@ -1007,6 +1126,7 @@ class App1:
 class App2:
     def __init__(self):
         pass
+
     def run(self):
         about = appuifw.Text(scrollbar=True, skinned=True)
         about.font = (u"Nokia Sans S60", 25)
@@ -1019,7 +1139,8 @@ class App2:
         about.style = appuifw.STYLE_UNDERLINE
         about.add(u"\n\nhttps://t.me/symbian_world")
         return about
-    def run_body(self):
+
+    def run_body(self):  # Automatic version
         close_all_views()
         about_app = self.run()
         appuifw.app.activate_tab(1)
@@ -1040,10 +1161,11 @@ def handle_tab(index):
         appuifw.app.body = app2.run()
     
 def exit_key_handler():
-    app_lock.signal()
+    app_lock.signal()  # Action to do when user presses exit on first view (functions / about)
+    # appuifw.app.set_exit() would be needed in PyS60 1.4.5
 
 app_lock = e32.Ao_lock()
-file_opener = appuifw.Content_handler()
+file_opener = appuifw.Content_handler()  # Defines a class for opening files directly
 default_menu = [(u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
 appuifw.app.menu = default_menu
 appuifw.app.set_tabs([u"Functions", u"About"], handle_tab)
