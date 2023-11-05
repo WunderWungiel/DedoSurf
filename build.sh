@@ -1,6 +1,6 @@
 #!/bin/sh
 
-if ! command -v python25 &> /dev/null; then
+if ! command -v python2.5 &> /dev/null; then
     echo "Requires Python 2.5.4 to be installed."
     exit 1
 fi
@@ -12,5 +12,5 @@ fi
 
 mypath=$(pwd -P)
 pushd ../PythonForS60 > /dev/null
-python25 ./ensymble.py py2sis --appname="DedoSurf" --version $1 --caption="DedoSurf" --shortcaption="DedoSurf" --vendor="Wunder Wungiel" --uid=0xF2395303 --icon="$mypath/res/icon.svg" --drive=c "$mypath/src" "$mypath"
+python2.5 ./ensymble.py py2sis --appname="DedoSurf" --version $1 --caption="DedoSurf" --shortcaption="DedoSurf" --vendor="Wunder Wungiel" --uid=0xF2395303 --icon="$mypath/res/icon.svg" --drive=c "$mypath/src" "$mypath"
 popd > /dev/null
