@@ -1,12 +1,12 @@
 import appuifw2 as appuifw
 import e32
-import urllib2
+import urllib
 import graphics
 import os
 import re
 import sysinfo
 import zipfile
-from pydedomilapi import get_resolutions, get_app_info, search, retrieve_games
+import simplejson as json
 
 # Use e32.drive_list() to retrieve drives list
 def get_drive():
@@ -24,6 +24,28 @@ if not os.path.isdir(dl_path):
 if not os.path.isdir(os.path.join(dl_path, "screenshots")):
     os.mkdir(os.path.join(dl_path, "screenshots"))
 
+class API:
+    def __init__(self):
+        self.api_url = "http://wunderwungiel.pl/pydedomilapi/"
+
+    def get_resolutions(self, link):
+        r = urllib.urlopen(self.api_url + "get_resolutions/?link=%s" % link)
+        return json.loads(r.read().decode("utf-8"))
+
+    def get_app_info(self, link):
+        r = urllib.urlopen(self.api_url + "get_app_info/?link=%s" % link)
+        return json.loads(r.read().decode("utf-8"))
+
+    def search(self, query):
+        r = urllib.urlopen(self.api_url + "search/?q=%s" % query)
+        return json.loads(r.read().decode("utf-8"))
+
+    def retrieve_games(self, link):
+        r = urllib.urlopen(self.api_url + "retrieve_games/?link=%s" % link)
+        return json.loads(r.read().decode("utf-8"))
+
+api = API()
+
 # One liner to grab resolution of device into string in <width>x<height> format
 device_res = 'x'.join([str(res) for res in sysinfo.display_pixels()])
 
@@ -31,14 +53,14 @@ class GameDescriptionView(appuifw.View):
     def __init__(self, gameinfo):
         appuifw.View.__init__(self)
                 
-        self.app_title = gameinfo.title
-        self.description = gameinfo.description
-        self.date = gameinfo.date
-        self.counter = gameinfo.counter
-        self.download_links = gameinfo.download_links
-        self.vendor = gameinfo.vendor
-        self.splash = gameinfo.splash
-        self.screenshot = gameinfo.screenshots
+        self.app_title = gameinfo["title"]
+        self.description = gameinfo["description"]
+        self.date = gameinfo["date"]
+        self.counter = gameinfo["counter"]
+        self.download_links = gameinfo["download_links"]
+        self.vendor = gameinfo["vendor"]
+        self.splash = gameinfo["splash"]
+        self.screenshot = gameinfo["screenshots"]
                 
         # View Properties
         self.exit_key_text = u"Back"
@@ -75,7 +97,7 @@ class GameDescriptionView(appuifw.View):
             filename = parts[-1]
             path = os.path.join(dl_path, "screenshots", filename)
             if not os.path.isfile(path):
-                r = urllib2.urlopen(link)
+                r = urllib.urlopen(link)
                 f = open(path, "wb")
                 f.write(r.read())
                 f.close()
@@ -121,7 +143,7 @@ class GameDescriptionView(appuifw.View):
             links_links = []
 
             for key, value in links.items():
-                if description_ref.app_title in key:
+                if key.find(description_ref.app_title) != -1:
                     key = key.replace(description_ref.app_title, '').strip()
                 links_names.append(key)
                 links_links.append(value.get('link'))
@@ -133,11 +155,11 @@ class GameDescriptionView(appuifw.View):
             index = self.download_app.current()
             link = self.links_links[index]
             try:
-                response = urllib2.urlopen(link)
-            except urllib2.HTTPError:
+                response = urllib.urlopen(link)
+            except urllib.HTTPError:
                 appuifw.note(u"Error while downloading game", "error")
                 return
-            except urllib2.URLError:
+            except urllib.URLError:
                 appuifw.note(u"Error while downloading game", "error")
                 return
             content_disposition = response.headers.get("Content-Disposition")
@@ -164,11 +186,11 @@ class GameDescriptionView(appuifw.View):
                         extracted = open(full_jar_path, "wb")
                         try:
                             extracted.write(zip_file.read(name))
+                            extracted.close()
                         except MemoryError:
                             interrupted = True
-                            break
-                        finally:
                             extracted.close()
+                            break
                         break
                 zip_file.close()
             if interrupted:
@@ -215,8 +237,8 @@ class OpenByLink:
             appuifw.note(u"Not a Dedomil link", "error")
             return
         try:
-            game_resolutions = get_resolutions(link)
-        except urllib2.URLError:
+            game_resolutions = api.get_resolutions(link)
+        except urllib.URLError:
             appuifw.note(u"Failed fetching info", "error")
             return
         resolutions_names = []
@@ -225,7 +247,7 @@ class OpenByLink:
             resolutions_names.append(key)
             resolutions_links.append(value)
         if device_res in resolutions_names:
-            gameinfo = get_app_info(resolutions_links[resolutions_names.index(device_res)])
+            gameinfo = api.get_app_info(resolutions_links[resolutions_names.index(device_res)])
             game_description_view = GameDescriptionView(gameinfo)
             appuifw.app.view = game_description_view
         else:
@@ -248,7 +270,7 @@ class OpenByLink:
 
         def handler(self):
             index = self.resolutions_app.current()
-            gameinfo = get_app_info(self.resolutions_links[index])
+            gameinfo = api.get_app_info(self.resolutions_links[index])
             game_description_view = GameDescriptionView(gameinfo)
             appuifw.app.view = game_description_view
 
@@ -307,8 +329,8 @@ class App1:
             appuifw.View.__init__(self)
 
             self.results = True
-            results = search(query)
-            if not results.results:
+            results = api.search(query)
+            if not results.get("results"):
                 appuifw.note(u"No results!")
                 self.results = False
                 return
@@ -316,7 +338,7 @@ class App1:
             names = []
             links = []
 
-            for key, value in results.results.items():
+            for key, value in results["results"].items():
                 names.append(key)
                 links.append(value['link'])
 
@@ -327,15 +349,15 @@ class App1:
             # View Properties
             self.exit_key_text = u"Back"
 
-            if results.current_page and results.next_page and results.last_page:
-                self.current_page = results.current_page
-                self.first_page = results.current_page
-                self.next_page = results.next_page
-                self.last_page = results.last_page
+            if results.get("current_page") and results.get("next_page") and results.get("last_page"):
+                self.current_page = results["current_page"]
+                self.first_page = results["current_page"]
+                self.next_page = results["next_page"]
+                self.last_page = results["last_page"]
                 pages = True
-            elif results.current_page and results.last_page:
-                self.current_page = results.current_page
-                self.last_page = results.last_page
+            elif results.get("current_page") and results.get("last_page"):
+                self.current_page = results["current_page"]
+                self.last_page = results["last_page"]
                 pages = True
             else:
                 pages = False
@@ -367,23 +389,23 @@ class App1:
                 previous_link = re.sub(pattern.group(0), '/page/%d' % previous_page_i, link)
                 self.previous_page = [previous_page_i, previous_link]
 
-            results = retrieve_games(link)
+            results = api.retrieve_games(link)
             names = []
             links = []
 
-            for key, value in results.results.items():
+            for key, value in results["results"].items():
                 names.append(key)
                 links.append(value['link'])
 
             self.results_names = names
             self.results_links = links
 
-            if results.current_page and results.next_page:
-                self.current_page = results.current_page
-                self.next_page = results.next_page
+            if results.get("current_page") and results.get("next_page"):
+                self.current_page = results["current_page"]
+                self.next_page = results["next_page"]
                 pages = True
-            elif results.current_page:
-                self.current_page = results.current_page
+            elif results.get("current_page"):
+                self.current_page = results["current_page"]
                 pages = True
             else:
                 pages = False
@@ -430,14 +452,14 @@ class App1:
         def handler(self):
             index = self.results_app.current()
 
-            game_resolutions = get_resolutions(self.results_links[index])
+            game_resolutions = api.get_resolutions(self.results_links[index])
             resolutions_names = []
             resolutions_links = []
             for key, value in game_resolutions.items():
                 resolutions_names.append(key)
                 resolutions_links.append(value)
             if device_res in resolutions_names:
-                gameinfo = get_app_info(resolutions_links[resolutions_names.index(device_res)])
+                gameinfo = api.get_app_info(resolutions_links[resolutions_names.index(device_res)])
                 game_description_view = GameDescriptionView(gameinfo)
                 appuifw.app.view = game_description_view
             else:
@@ -464,7 +486,7 @@ class App1:
 
             def handler(self):
                 index = self.resolutions_app.current()
-                gameinfo = get_app_info(self.resolutions_links[index])
+                gameinfo = api.get_app_info(self.resolutions_links[index])
                 game_description_view = GameDescriptionView(gameinfo)
                 appuifw.app.view = game_description_view
 
@@ -476,11 +498,11 @@ class App1:
         def __init__(self, link):
             appuifw.View.__init__(self)
 
-            vendors_list = retrieve_games(link)
+            vendors_list = api.retrieve_games(link)
             vendors_names = []
             vendors_links = []
 
-            for key, value in vendors_list.results.items():
+            for key, value in vendors_list.get("results").items():
                 vendors_names.append(key)
                 vendors_links.append(value.get("link"))
             
@@ -490,15 +512,15 @@ class App1:
             # View Properties
             self.exit_key_text = u"Back"
 
-            if vendors_list.current_page and vendors_list.next_page and vendors_list.last_page:
-                self.current_page = vendors_list.current_page
-                self.first_page = vendors_list.current_page
-                self.next_page = vendors_list.next_page
-                self.last_page = vendors_list.last_page
+            if vendors_list.get("current_page") and vendors_list.get("next_page") and vendors_list.get("last_page"):
+                self.current_page = vendors_list["current_page"]
+                self.first_page = vendors_list["current_page"]
+                self.next_page = vendors_list["next_page"]
+                self.last_page = vendors_list["last_page"]
                 pages = True
-            elif vendors_list.current_page and vendors_list.last_page:
-                self.current_page = vendors_list.current_page
-                self.last_page = vendors_list.last_page
+            elif vendors_list.get("current_page") and vendors_list.get("last_page"):
+                self.current_page = vendors_list["current_page"]
+                self.last_page = vendors_list["last_page"]
                 pages = True
             else:
                 pages = False
@@ -532,23 +554,23 @@ class App1:
                 previous_link = re.sub(pattern.group(0), '/page/%d' % previous_page_i, link)
                 self.previous_page = [previous_page_i, previous_link]
 
-            vendors_list = retrieve_games(link)
+            vendors_list = api.retrieve_games(link)
             vendors_names = []
             vendors_links = []
 
-            for key, value in vendors_list.results.items():
+            for key, value in vendors_list.get("results").items():
                 vendors_names.append(key)
                 vendors_links.append(value.get("link"))
             
             self.vendors_names = vendors_names
             self.vendors_links = vendors_links
 
-            if vendors_list.current_page and vendors_list.next_page:
-                self.current_page = vendors_list.current_page
-                self.next_page = vendors_list.next_page
+            if vendors_list.get("current_page") and vendors_list.get("next_page"):
+                self.current_page = vendors_list["current_page"]
+                self.next_page = vendors_list["next_page"]
                 pages = True
-            elif vendors_list.current_page:
-                self.current_page = vendors_list.current_page
+            elif vendors_list.get("current_page"):
+                self.current_page = vendors_list["current_page"]
                 pages = True
             else:
                 pages = False
@@ -607,13 +629,13 @@ class App1:
 
                 self.vendors_ref = vendors_ref
                 self.vendors_app = vendors_ref.vendors_app
-                games_list = retrieve_games(link)
+                games_list = api.retrieve_games(link)
                 self.games_list = games_list
 
                 games_names = []
                 games_links = []
 
-                for key, value in games_list.results.items():
+                for key, value in games_list.get("results").items():
                     games_names.append(key)
                     games_links.append(value.get("link"))
 
@@ -623,15 +645,15 @@ class App1:
                 # View Properties
                 self.exit_key_text = u"Back"
 
-                if games_list.current_page and games_list.next_page and games_list.last_page:
-                    self.current_page = games_list.current_page
-                    self.first_page = games_list.current_page
-                    self.next_page = games_list.next_page
-                    self.last_page = games_list.last_page
+                if games_list.get("current_page") and games_list.get("next_page") and games_list.get("last_page"):
+                    self.current_page = games_list["current_page"]
+                    self.first_page = games_list["current_page"]
+                    self.next_page = games_list["next_page"]
+                    self.last_page = games_list["last_page"]
                     pages = True
-                elif games_list.current_page and games_list.last_page:
-                    self.current_page = games_list.current_page
-                    self.last_page = games_list.last_page
+                elif games_list.get("current_page") and games_list.get("last_page"):
+                    self.current_page = games_list["current_page"]
+                    self.last_page = games_list["last_page"]
                     pages = True
                 else:
                     pages = False
@@ -665,23 +687,23 @@ class App1:
                     previous_link = re.sub(pattern.group(0), '/page/%d' % previous_page_i, link)
                     self.previous_page = [previous_page_i, previous_link]
 
-                games_list = retrieve_games(link)
+                games_list = api.retrieve_games(link)
                 games_names = []
                 games_links = []
 
-                for key, value in games_list.results.items():
+                for key, value in games_list.get("results").items():
                     games_names.append(key)
                     games_links.append(value.get("link"))
 
                 self.games_names = games_names
                 self.games_links = games_links
 
-                if games_list.current_page and games_list.next_page:
-                    self.current_page = games_list.current_page
-                    self.next_page = games_list.next_page
+                if games_list.get("current_page") and games_list.get("next_page"):
+                    self.current_page = games_list["current_page"]
+                    self.next_page = games_list["next_page"]
                     pages = True
-                elif games_list.current_page:
-                    self.current_page = games_list.current_page
+                elif games_list.get("current_page"):
+                    self.current_page = games_list["current_page"]
                     pages = True
                 else:
                     pages = False
@@ -729,14 +751,14 @@ class App1:
                 index = self.vendor_app.current()
                 link = self.games_links[index]
 
-                game_resolutions = get_resolutions(link)
+                game_resolutions = api.get_resolutions(link)
                 resolutions_names = []
                 resolutions_links = []
                 for key, value in game_resolutions.items():
                     resolutions_names.append(key)
                     resolutions_links.append(value)
                 if device_res in resolutions_names:
-                    gameinfo = get_app_info(resolutions_links[resolutions_names.index(device_res)])
+                    gameinfo = api.get_app_info(resolutions_links[resolutions_names.index(device_res)])
                     game_description_view = GameDescriptionView(gameinfo)
                     appuifw.app.view = game_description_view
                 else:
@@ -766,7 +788,7 @@ class App1:
             def handler(self):
                 index = self.resolutions_app.current()
 
-                gameinfo = get_app_info(self.resolutions_links[index])
+                gameinfo = api.get_app_info(self.resolutions_links[index])
                 game_description_view = GameDescriptionView(gameinfo)
                 appuifw.app.view = game_description_view
 
@@ -778,12 +800,12 @@ class App1:
         def __init__(self, link):
             appuifw.View.__init__(self)
 
-            resolutions_list = retrieve_games(link)
+            resolutions_list = api.retrieve_games(link)
 
             resolutions_names = []
             resolutions_links = []
 
-            for key, value in resolutions_list.results.items():
+            for key, value in resolutions_list.get("results").items():
                 resolutions_names.append(key)
                 resolutions_links.append(value.get("link"))
             
@@ -816,13 +838,13 @@ class App1:
                 self.name = name
                 self.resolutions_ref = resolutions_ref
                 self.resolutions_app = resolutions_ref.resolutions_app
-                games_list = retrieve_games(link)
+                games_list = api.retrieve_games(link)
                 self.games_list = games_list
 
                 games_names = []
                 games_links = []
 
-                for key, value in games_list.results.items():
+                for key, value in games_list.get("results").items():
                     games_names.append(key)
                     games_links.append(value.get("link"))
 
@@ -832,15 +854,15 @@ class App1:
                 # View Properties
                 self.exit_key_text = u"Back"
 
-                if games_list.current_page and games_list.next_page and games_list.last_page:
-                    self.current_page = games_list.current_page
-                    self.first_page = games_list.current_page
-                    self.next_page = games_list.next_page
-                    self.last_page = games_list.last_page
+                if games_list.get("current_page") and games_list.get("next_page") and games_list.get("last_page"):
+                    self.current_page = games_list["current_page"]
+                    self.first_page = games_list["current_page"]
+                    self.next_page = games_list["next_page"]
+                    self.last_page = games_list["last_page"]
                     pages = True
-                elif games_list.current_page and games_list.last_page:
-                    self.current_page = games_list.current_page
-                    self.last_page = games_list.last_page
+                elif games_list.get("current_page") and games_list.get("last_page"):
+                    self.current_page = games_list["current_page"]
+                    self.last_page = games_list["last_page"]
                     pages = True
                 else:
                     pages = False
@@ -873,25 +895,25 @@ class App1:
                     previous_link = re.sub(pattern.group(0), '/page/%d' % previous_page_i, link)
                     self.previous_page = [previous_page_i, previous_link]
 
-                games_list = retrieve_games(link)
+                games_list = api.retrieve_games(link)
                 self.games_list = games_list
 
                 games_names = []
                 games_links = []
 
-                for key, value in games_list.results.items():
+                for key, value in games_list.get("results").items():
                     games_names.append(key)
                     games_links.append(value.get("link"))
 
                 self.games_names = games_names
                 self.games_links = games_links
 
-                if games_list.current_page and games_list.next_page:
-                    self.current_page = games_list.current_page
-                    self.next_page = games_list.next_page
+                if games_list.get("current_page") and games_list.get("next_page"):
+                    self.current_page = games_list["current_page"]
+                    self.next_page = games_list["next_page"]
                     pages = True
-                elif games_list.current_page:
-                    self.current_page = games_list.current_page
+                elif games_list.get("current_page"):
+                    self.current_page = games_list["current_page"]
                     pages = True
                 else:
                     pages = False
@@ -939,7 +961,7 @@ class App1:
                 index = self.resolution_app.current()
                 link = self.games_links[index]
 
-                gameinfo = get_app_info(link)
+                gameinfo = api.get_app_info(link)
                 game_description_view = GameDescriptionView(gameinfo)
                 appuifw.app.view = game_description_view
 
@@ -951,11 +973,11 @@ class App1:
         def __init__(self, link):
             appuifw.View.__init__(self)
 
-            resolutions_list = retrieve_games(link)
+            resolutions_list = api.retrieve_games(link)
             resolutions_names = []
             resolutions_links = []
 
-            for key, value in resolutions_list.results.items():
+            for key, value in resolutions_list.get("results").items():
                 resolutions_names.append(key)
                 resolutions_links.append(value.get("link"))
             if u"All resolutions" in resolutions_names:
@@ -1001,13 +1023,13 @@ class App1:
                 appuifw.View.__init__(self)
 
                 self.name = name
-                games_list = retrieve_games(link)
+                games_list = api.retrieve_games(link)
                 self.games_list = games_list
 
                 games_names = []
                 games_links = []
 
-                for key, value in games_list.results.items():
+                for key, value in games_list.get("results").items():
                     games_names.append(key)
                     games_links.append(value.get("link"))
 
@@ -1017,15 +1039,15 @@ class App1:
                 # View Properties
                 self.exit_key_text = u"Back"
 
-                if games_list.current_page and games_list.next_page and games_list.last_page:
-                    self.current_page = games_list.current_page
-                    self.first_page = games_list.current_page
-                    self.next_page = games_list.next_page
-                    self.last_page = games_list.last_page
+                if games_list.get("current_page") and games_list.get("next_page") and games_list.get("last_page"):
+                    self.current_page = games_list["current_page"]
+                    self.first_page = games_list["current_page"]
+                    self.next_page = games_list["next_page"]
+                    self.last_page = games_list["last_page"]
                     pages = True
-                elif games_list.current_page and games_list.last_page:
-                    self.current_page = games_list.current_page
-                    self.last_page = games_list.last_page
+                elif games_list.get("current_page") and games_list.get("last_page"):
+                    self.current_page = games_list["current_page"]
+                    self.last_page = games_list["last_page"]
                     pages = True
                 else:
                     pages = False
@@ -1058,25 +1080,25 @@ class App1:
                     previous_link = re.sub(pattern.group(0), '/page/%d' % previous_page_i, link)
                     self.previous_page = [previous_page_i, previous_link]
 
-                games_list = retrieve_games(link)
+                games_list = api.retrieve_games(link)
                 self.games_list = games_list
 
                 games_names = []
                 games_links = []
 
-                for key, value in games_list.results.items():
+                for key, value in games_list.get("results").items():
                     games_names.append(key)
                     games_links.append(value.get("link"))
 
                 self.games_names = games_names
                 self.games_links = games_links
 
-                if games_list.current_page and games_list.next_page:
-                    self.current_page = games_list.current_page
-                    self.next_page = games_list.next_page
+                if games_list.get("current_page") and games_list.get("next_page"):
+                    self.current_page = games_list["current_page"]
+                    self.next_page = games_list["next_page"]
                     pages = True
-                elif games_list.current_page:
-                    self.current_page = games_list.current_page
+                elif games_list.get("current_page"):
+                    self.current_page = games_list["current_page"]
                     pages = True
                 else:
                     pages = False
@@ -1124,7 +1146,7 @@ class App1:
                 index = self.resolution_app.current()
                 link = self.games_links[index]
 
-                gameinfo = get_app_info(link)
+                gameinfo = api.get_app_info(link)
                 game_description_view = GameDescriptionView(gameinfo)
                 appuifw.app.view = game_description_view
 
@@ -1143,7 +1165,7 @@ class App2:
         about.add(u"DedoSurf")
         about.font = (u"Nokia Sans S60", 15)
         about.add(u"\nBy Wunder Wungiel")
-        about.add(u"\n\nDedomil.net client for Symbian devices, written in PyS60 2.0.0.")
+        about.add(u"\n\nDedomil.net client for Symbian devices, written in PyS60 1.4.5.")
         about.add(u"\n\n----------------------------\n\n")
         about.add(u"Join our Telegram group:")
         about.style = appuifw.STYLE_UNDERLINE
@@ -1172,7 +1194,7 @@ def handle_tab(index):
     
 def exit_key_handler():
     app_lock.signal()  # Action to do when user presses exit on first view (functions / about)
-    # appuifw.app.set_exit() would be needed in PyS60 1.4.5
+    appuifw.app.set_exit()
 
 app_lock = e32.Ao_lock()
 file_opener = appuifw.Content_handler()  # Defines an instance of Content_handler for opening files directly
