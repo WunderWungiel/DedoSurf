@@ -8,23 +8,16 @@ import sysinfo
 import zipfile
 from pydedomilapi import get_resolutions, get_app_info, search, retrieve_games
 
-dl_path = None
-while not dl_path:
-    try:
-        if os.path.isdir("F:\\"):
-            dl_path = "F:\\Dedomil"
-    except OSError:
-        pass
-    try:
-        if os.path.isdir("E:\\"):
-            dl_path = "E:\\Dedomil"
-    except OSError:
-        pass
-    if os.path.isdir("C:\\"):
-        dl_path = "C:\\data\\Dedomil"
-    else:
-        appuifw.note(u"No disk available!", "error")
-        exit_key_handler()
+# Use e32.drive_list() to retrieve drives list
+def get_drive():
+    drives = e32.drive_list()
+    # Remove Z and Y
+    for letter in [u"Z:", u"Y:"]:
+        if letter in drives:
+            drives.remove(letter)
+    return drives[-1] + "\\Dedomil"
+
+dl_path = get_drive()
 
 if not os.path.isdir(dl_path):
     os.mkdir(dl_path)
@@ -74,8 +67,10 @@ class GameDescriptionView(appuifw.View):
 
     class AppScreenshots:
         def __init__(self, description_ref):
-
+            self.skip = None
             link = description_ref.screenshot
+            if not link:
+                self.skip = True
             parts = link.split('/')
             filename = parts[-1]
             path = os.path.join(dl_path, "screenshots", filename)
@@ -90,6 +85,9 @@ class GameDescriptionView(appuifw.View):
             self.screenshots_app.blit(self.myimage, scale=self.scale)
 
         def run(self):
+            if self.skip:
+                text_app = appuifw.Text(skinned=True)
+                return text_app
             try:
                 self.myimage = graphics.Image.open(self.path)
                 self.screenshots_app = appuifw.Canvas(event_callback=None, redraw_callback=self.handle_redraw)
@@ -213,7 +211,14 @@ class OpenByLink:
         if not link:
             return
         close_all_views()
-        game_resolutions = get_resolutions(link)
+        if not "dedomil.net/games" in link:
+            appuifw.note(u"Not a Dedomil link", "error")
+            return
+        try:
+            game_resolutions = get_resolutions(link)
+        except urllib2.URLError:
+            appuifw.note(u"Failed fetching info", "error")
+            return
         resolutions_names = []
         resolutions_links = []
         for key, value in game_resolutions.items():
