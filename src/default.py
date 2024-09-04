@@ -241,6 +241,11 @@ class OpenByLink:
         except urllib.URLError:
             appuifw.note(u"Failed fetching info", "error")
             return
+
+        if not len(game_resolutions) > 0:
+            appuifw.note(u"No resolutions available...")
+            return
+
         resolutions_names = []
         resolutions_links = []
         for key, value in game_resolutions.items():
@@ -453,8 +458,14 @@ class App1:
             index = self.results_app.current()
 
             game_resolutions = api.get_resolutions(self.results_links[index])
+
+            if not len(game_resolutions) > 0:
+                appuifw.note(u"No resolutions available...")
+                return
+
             resolutions_names = []
             resolutions_links = []
+
             for key, value in game_resolutions.items():
                 resolutions_names.append(key)
                 resolutions_links.append(value)
@@ -752,11 +763,17 @@ class App1:
                 link = self.games_links[index]
 
                 game_resolutions = api.get_resolutions(link)
+
+                if not len(game_resolutions) > 0:
+                    appuifw.note(u"No resolutions available...")
+                    return
+
                 resolutions_names = []
                 resolutions_links = []
                 for key, value in game_resolutions.items():
                     resolutions_names.append(key)
                     resolutions_links.append(value)
+
                 if device_res in resolutions_names:
                     gameinfo = api.get_app_info(resolutions_links[resolutions_names.index(device_res)])
                     game_description_view = GameDescriptionView(gameinfo)
