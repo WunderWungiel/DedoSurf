@@ -26,18 +26,18 @@ if not os.path.isdir(os.path.join(dl_path, "screenshots")):
 
 class API:
     def __init__(self):
-        self.api_url = "http://wunderwungiel.pl/pydedomilapi/"
+        self.api_url = "http://192.168.1.5:8080/api/v1/"
 
-    def get_resolutions(self, link):
-        r = urllib.urlopen(self.api_url + "get_resolutions/?link=%s" % link)
+    def get_resolutions(self, id):
+        r = urllib.urlopen(self.api_url + "get_resolutions/?id=%s" % id)
         return json.loads(r.read().decode("utf-8"))
 
     def get_app_info(self, link):
         r = urllib.urlopen(self.api_url + "get_app_info/?link=%s" % link)
         return json.loads(r.read().decode("utf-8"))
 
-    def search(self, query):
-        r = urllib.urlopen(self.api_url + "search/?q=%s" % query)
+    def search(self, query, page):
+        r = urllib.urlopen(self.api_url + "search/?q=%s&page=%s" % (query, page))
         return json.loads(r.read().decode("utf-8"))
 
     def retrieve_games(self, link):
@@ -319,44 +319,40 @@ class App1:
             appuifw.View.__init__(self)
 
             self.results = True
-            results = api.search(query)
-            if not results.get("results"):
+            self.page = 1 # Default
+
+            response = api.search(query, self.page)
+            
+            if not len(response.get("results")) > 0:
                 appuifw.note(u"No results!")
                 self.results = False
                 return
             
-            names = []
-            links = []
+            self.page = response["page"]
+            self.total_pages = response["total_pages"]
+            
+            self.results_names = []
+            self.results_ids = []
 
-            for key, value in results["results"].items():
-                names.append(key)
-                links.append(value['link'])
+            for key, value in response["results"].items():
+                self.results_names.append(key)
+                self.results_ids.append(value['id'])
 
             self.query = query
-            self.results_names = names
-            self.results_links = links
             
             # View Properties
             self.exit_key_text = u"Back"
 
-            if results.get("current_page") and results.get("next_page") and results.get("last_page"):
-                self.current_page = results["current_page"]
-                self.first_page = results["current_page"]
-                self.next_page = results["next_page"]
-                self.last_page = results["last_page"]
-                pages = True
-            elif results.get("current_page") and results.get("last_page"):
-                self.current_page = results["current_page"]
-                self.last_page = results["last_page"]
-                pages = True
+            if self.total_pages > 0:
+                self.pages = True
             else:
-                pages = False
+                self.pages = False
 
-            if pages:
+            if self.pages:
                 self.menu = [
                     (u"Next page", self.fetch_next_page),
                     (u"Last page", self.fetch_last_page)] + default_menu
-                self.title = u"Search results | %d" % self.current_page[0]
+                self.title = u"Search results | %d" % self.page
             else:
                 self.menu = default_menu
                 self.title = u'Search results'
@@ -365,62 +361,47 @@ class App1:
 
         def fetch_page(self, action):
             if action == "next":
-                link = self.next_page[1]
+                page = self.page + 1
             elif action == "previous":
-                link = self.previous_page[1]
+                page = self.page - 1
             elif action == "first":
-                link = self.first_page[1]
+                page = 1
             elif action == "last":
-                link = self.last_page[1]
+                page = self.total_pages
 
-            if action in ["next", "last", "previous"]:
-                pattern = re.search(r"/page/(\d+)/?", link)
-                previous_page_i = int(pattern.group(1)) - 1
-                previous_link = re.sub(pattern.group(0), '/page/%d' % previous_page_i, link)
-                self.previous_page = [previous_page_i, previous_link]
+            self.previous_page = self.page - 1
 
-            results = api.retrieve_games(link)
-            names = []
-            links = []
+            response = api.search(self.query, page)
+            
+            self.results_names = []
+            self.results_ids = []
 
-            for key, value in results["results"].items():
-                names.append(key)
-                links.append(value['link'])
-
-            self.results_names = names
-            self.results_links = links
-
-            if results.get("current_page") and results.get("next_page"):
-                self.current_page = results["current_page"]
-                self.next_page = results["next_page"]
-                pages = True
-            elif results.get("current_page"):
-                self.current_page = results["current_page"]
-                pages = True
-            else:
-                pages = False
+            for key, value in response["results"].items():
+                self.results_names.append(key)
+                self.results_ids.append(value['id'])
 
             # View Properties
-            if pages and self.current_page[0] != self.last_page[0] and self.current_page[0] != self.first_page[0]:
-                self.menu = [
-                    (u"Next page", self.fetch_next_page),
-                    (u"First page", self.fetch_first_page),
-                    (u"Previous page", self.fetch_previous_page),
-                    (u"Last page", self.fetch_last_page)
-                ] + default_menu
-                self.title = u"Search results | %d" % self.current_page[0]
-            elif pages and self.current_page[0] == self.first_page[0]:
-                self.menu = [
-                    (u"Next page", self.fetch_next_page),
-                    (u"Last page", self.fetch_last_page)
-                ] + default_menu
-                self.title = u"Search results | %d" % self.current_page[0]
-            elif pages and self.current_page[0] == self.last_page[0]:
-                self.menu = [
-                    (u"First page", self.fetch_first_page),
-                    (u"Previous page", self.fetch_previous_page)
-                ] + default_menu
-                self.title = u"Search results | %d" % self.current_page[0]
+            if self.pages:
+                if self.page != self.total_pages and self.page != 1:
+                    self.menu = [
+                        (u"Next page", self.fetch_next_page),
+                        (u"First page", self.fetch_first_page),
+                        (u"Previous page", self.fetch_previous_page),
+                        (u"Last page", self.fetch_last_page)
+                    ] + default_menu
+                    self.title = u"Search results | %d" % self.page
+                elif self.page == 1:
+                    self.menu = [
+                        (u"Next page", self.fetch_next_page),
+                        (u"Last page", self.fetch_last_page)
+                    ] + default_menu
+                    self.title = u"Search results | %d" % self.page
+                elif self.page == self.total_pages:
+                    self.menu = [
+                        (u"First page", self.fetch_first_page),
+                        (u"Previous page", self.fetch_previous_page)
+                    ] + default_menu
+                    self.title = u"Search results | %d" % self.page
             else:
                 self.menu = default_menu
                 self.title = u'Search results'
@@ -442,7 +423,7 @@ class App1:
         def handler(self):
             index = self.results_app.current()
 
-            game_resolutions = api.get_resolutions(self.results_links[index])
+            game_resolutions = api.get_resolutions(self.results_ids[index])
 
             if not len(game_resolutions) > 0:
                 appuifw.note(u"No resolutions available...")

@@ -1,7 +1,7 @@
 #!/bin/sh
 
 if ! command -v python2.2 &> /dev/null; then
-    echo "Requires Python 2.2.2 to be installed."
+    echo "Requires Python 2.2 to be installed."
     exit 1
 fi
 
