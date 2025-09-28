@@ -28,12 +28,12 @@ class API:
     def __init__(self):
         self.api_url = "http://192.168.1.5:8080/api/v1/"
 
-    def get_resolutions(self, id):
-        r = urllib.urlopen(self.api_url + "get_resolutions/?id=%s" % id)
+    def get_resolutions(self, game_id):
+        r = urllib.urlopen(self.api_url + "get_resolutions/?id=%s" % game_id)
         return json.loads(r.read().decode("utf-8"))
 
-    def get_app_info(self, link):
-        r = urllib.urlopen(self.api_url + "get_game/?link=%s" % link)
+    def get_game(self, game_id, resolution):
+        r = urllib.urlopen(self.api_url + "get_game/?id=%s&resolution=%s" % (game_id, resolution))
         return json.loads(r.read().decode("utf-8"))
 
     def search(self, query, page):
@@ -47,39 +47,39 @@ class API:
 api = API()
 
 # One liner to grab resolution of device into string in <width>x<height> format
-device_res = 'x'.join([str(res) for res in sysinfo.display_pixels()])
+device_resolution = 'x'.join([str(res) for res in sysinfo.display_pixels()])
 
 class GameDescriptionView(appuifw.View):
-    def __init__(self, gameinfo):
+    def __init__(self, game):
         appuifw.View.__init__(self)
                 
-        self.app_title = gameinfo["title"]
-        self.description = gameinfo["description"]
-        self.date = gameinfo["date"]
-        self.counter = gameinfo["counter"]
-        self.download_links = gameinfo["download_links"]
-        self.vendor = gameinfo["vendor"]
-        self.splash = gameinfo["splash"]
-        self.screenshot = gameinfo["screenshots"]
+        self.app_title = game["title"]
+        self.description = game["description"]
+        self.date = game["date"]
+        self.downloads = game["downloads"]
+        self.download_links = game["resolutions"]
+        self.vendor = game["vendor"]
+        self.splash = game.get("splash")
+        self.screenshot = game.get("screenshot")
                 
         # View Properties
         self.exit_key_text = u"Back"
         self.menu = default_menu
         self.set_tabs([u"Info", u"Screenshots", u"Description", u"Links"], self.handle_tab)
         self.title = u'Info | %s' % self.app_title
-        self.body = self.app_simple_info()
+        self.body = self.game_info()
         # End of View Properties
 
-    def app_simple_info(self):
-        simple_info_app = appuifw.Text(scrollbar=True, skinned=True)
-        simple_info_app.font = (u"Nokia Sans S60", 25)
-        simple_info_app.style = appuifw.STYLE_BOLD
-        simple_info_app.add(self.app_title)
-        simple_info_app.font = (u"Nokia Sans S60", 15)
-        simple_info_app.add("\n\nAdded: %s" % self.date)
-        simple_info_app.add("\n\nDownloads: %s" % self.counter)
-        simple_info_app.add("\n\nVendor: %s" % self.vendor)
-        return simple_info_app
+    def game_info(self):
+        info_app = appuifw.Text(scrollbar=True, skinned=True)
+        info_app.font = (u"Nokia Sans S60", 25)
+        info_app.style = appuifw.STYLE_BOLD
+        info_app.add(self.app_title)
+        info_app.font = (u"Nokia Sans S60", 15)
+        info_app.add("\n\nAdded: %s" % self.date)
+        info_app.add("\n\nDownloads: %s" % self.downloads)
+        info_app.add("\n\nVendor: %s" % self.vendor)
+        return info_app
 
     def app_description(self):
         description_app = appuifw.Text(scrollbar=True, skinned=True)
@@ -194,7 +194,7 @@ class GameDescriptionView(appuifw.View):
     def handle_tab(self, index):
         if index == 0:
             self.title = 'Info | %s' % self.app_title
-            self.body = self.app_simple_info()
+            self.body = self.game_info()
         elif index == 1:
             self.title = 'Screenshots | %s' % self.app_title
             self.body = self.AppScreenshots(self).run()
@@ -222,23 +222,23 @@ class OpenByLink:
             appuifw.note(u"Not a Dedomil link", "error")
             return
         try:
-            game_resolutions = api.get_resolutions(link)
+            resolutions = api.get_resolutions(link)
         except urllib.URLError:
             appuifw.note(u"Failed fetching info", "error")
             return
 
-        if not len(game_resolutions) > 0:
+        if not len(resolutions) > 0:
             appuifw.note(u"No resolutions available...")
             return
 
         resolutions_names = []
         resolutions_links = []
-        for key, value in game_resolutions.items():
+        for key, value in resolutions.items():
             resolutions_names.append(key)
             resolutions_links.append(value)
-        if device_res in resolutions_names:
-            gameinfo = api.get_app_info(resolutions_links[resolutions_names.index(device_res)])
-            game_description_view = GameDescriptionView(gameinfo)
+        if device_resolution in resolutions_names:
+            game = api.get_game(resolutions_links[resolutions_names.index(device_resolution)])
+            game_description_view = GameDescriptionView(game)
             appuifw.app.view = game_description_view
         else:
             game_resolutions_view = self.GameResolutionsView(resolutions_names, resolutions_links)
@@ -260,29 +260,22 @@ class OpenByLink:
 
         def handler(self):
             index = self.resolutions_app.current()
-            gameinfo = api.get_app_info(self.resolutions_links[index])
-            game_description_view = GameDescriptionView(gameinfo)
+            game = api.get_game(self.resolutions_links[index])
+            game_description_view = GameDescriptionView(game)
             appuifw.app.view = game_description_view
 
         def run(self):
             self.resolutions_app = appuifw.Listbox(self.resolutions_names, self.handler)
             return self.resolutions_app
         
-class App1:
+class MainTab:
     def __init__(self):
-        self.entries_links = [
-            "http://dedomil.net/games/search",
-            "http://dedomil.net/games/vendors/page/1",
-            "http://dedomil.net/games/screens",
-            "http://dedomil.net/games/category/1"
-        ]
-
         self.entries = [
             u"Search", u"Vendors", u"Resolutions", u"Nokia Games"
         ]
 
     def handler(self):
-        index = self.app1.current()
+        index = self.main_tab.current()
         appuifw.app.set_tabs([u"Functions", u"About"], handle_tab)
         if index == 0:
             query = appuifw.query(u"Query to search:", "text")
@@ -311,8 +304,8 @@ class App1:
                 appuifw.app.view = nokia_games_view
 
     def run(self):
-        self.app1 = appuifw.Listbox(self.entries, self.handler)
-        return self.app1
+        self.main_tab = appuifw.Listbox(self.entries, self.handler)
+        return self.main_tab
 
     class SearchResultsView(appuifw.View):
         def __init__(self, query):
@@ -424,24 +417,19 @@ class App1:
             index = self.results_app.current()
 
             game_id = self.results_ids[index]
-            game_resolutions = api.get_resolutions(game_id)
+            resolutions = api.get_resolutions(game_id)
 
-            if not len(game_resolutions["resolutions"]) > 0:
+            if not len(resolutions) > 0:
                 appuifw.note(u"No resolutions available...")
                 return
-
-            resolutions_names = []
-
-            for key, value in game_resolutions.items():
-                resolutions_names.append(key)
             
-            if device_res in resolutions_names:
+            if device_resolution in resolutions:
             
-                gameinfo = api.get_app_info(game_id, device_res)
-                game_description_view = GameDescriptionView(gameinfo)
+                game = api.get_game(game_id, device_resolution)
+                game_description_view = GameDescriptionView(game)
                 appuifw.app.view = game_description_view
             else:
-                game_resolutions_view = self.GameResolutionsView(game_id, resolutions_names) # We're actually using resolution names as their IDs
+                game_resolutions_view = self.GameResolutionsView(game_id, resolutions) # We're actually using resolution names as their IDs
                 appuifw.app.view = game_resolutions_view
 
         def run(self):
@@ -449,10 +437,10 @@ class App1:
             return self.results_app
 
         class GameResolutionsView(appuifw.View):
-            def __init__(self, game_id, resolutions_names):
+            def __init__(self, game_id, resolutions):
                 appuifw.View.__init__(self)
 
-                self.resolutions_names = resolutions_names
+                self.resolutions = resolutions
                 self.game_id = game_id
 
                 # View Properties
@@ -464,12 +452,12 @@ class App1:
 
             def handler(self):
                 index = self.resolutions_app.current()
-                gameinfo = api.get_game(self.game_id, self.resolutions_names[index])
-                game_description_view = GameDescriptionView(gameinfo)
+                game = api.get_game(self.game_id, self.resolutions[index])
+                game_description_view = GameDescriptionView(game)
                 appuifw.app.view = game_description_view
 
             def run(self):
-                self.resolutions_app = appuifw.Listbox(self.resolutions_names, self.handler)
+                self.resolutions_app = appuifw.Listbox(self.resolutions, self.handler)
                 return self.resolutions_app
     
     class VendorsView(appuifw.View):
@@ -729,21 +717,15 @@ class App1:
                 index = self.vendor_app.current()
                 link = self.games_links[index]
 
-                game_resolutions = api.get_resolutions(link)
+                resolutions = api.get_resolutions(link)
 
-                if not len(game_resolutions) > 0:
+                if not len(resolutions) > 0:
                     appuifw.note(u"No resolutions available...")
                     return
 
-                resolutions_names = []
-                resolutions_links = []
-                for key, value in game_resolutions.items():
-                    resolutions_names.append(key)
-                    resolutions_links.append(value)
-
-                if device_res in resolutions_names:
-                    gameinfo = api.get_app_info(resolutions_links[resolutions_names.index(device_res)])
-                    game_description_view = GameDescriptionView(gameinfo)
+                if device_resolution in resolutions_names:
+                    game = api.get_game(resolutions_links[resolutions_names.index(device_resolution)])
+                    game_description_view = GameDescriptionView(game)
                     appuifw.app.view = game_description_view
                 else:
                     game_resolutions_view = self.vendors_ref.GameResolutionsView(resolutions_names, resolutions_links)
@@ -772,8 +754,8 @@ class App1:
             def handler(self):
                 index = self.resolutions_app.current()
 
-                gameinfo = api.get_app_info(self.resolutions_links[index])
-                game_description_view = GameDescriptionView(gameinfo)
+                game = api.get_game(self.resolutions_links[index])
+                game_description_view = GameDescriptionView(game)
                 appuifw.app.view = game_description_view
 
             def run(self):
@@ -945,8 +927,8 @@ class App1:
                 index = self.resolution_app.current()
                 link = self.games_links[index]
 
-                gameinfo = api.get_app_info(link)
-                game_description_view = GameDescriptionView(gameinfo)
+                game = api.get_game(link)
+                game_description_view = GameDescriptionView(game)
                 appuifw.app.view = game_description_view
 
             def run(self):
@@ -977,9 +959,9 @@ class App1:
             self.resolutions_links = resolutions_links
 
             self.skip_res = False
-            if device_res in resolutions_names:
-                link = resolutions_links[resolutions_names.index(device_res)]
-                resolution_view = self.ResolutionView(device_res, link)
+            if device_resolution in resolutions_names:
+                link = resolutions_links[resolutions_names.index(device_resolution)]
+                resolution_view = self.ResolutionView(device_resolution, link)
                 self.skip_res = True
                 appuifw.app.view = resolution_view
             else:
@@ -1130,15 +1112,15 @@ class App1:
                 index = self.resolution_app.current()
                 link = self.games_links[index]
 
-                gameinfo = api.get_app_info(link)
-                game_description_view = GameDescriptionView(gameinfo)
+                game = api.get_game(link)
+                game_description_view = GameDescriptionView(game)
                 appuifw.app.view = game_description_view
 
             def run(self):
                 self.resolution_app = appuifw.Listbox(self.games_names, self.handler)
                 return self.resolution_app
 
-class App2:
+class AboutTab:
     def __init__(self):
         pass
 
@@ -1163,18 +1145,18 @@ class App2:
         appuifw.app.title = u"About"
         appuifw.app.body = about_app
 
-app1 = App1()
-app2 = App2()
+main_tab = MainTab()
+about_tab = AboutTab()
 open_by_link = OpenByLink()
 
 def handle_tab(index):
     appuifw.app.exit_key_handler = exit_key_handler
     if index == 0:
         appuifw.app.title = u"DedoSurf"
-        appuifw.app.body = app1.run()
+        appuifw.app.body = main_tab.run()
     if index == 1:
         appuifw.app.title = u"About"
-        appuifw.app.body = app2.run()
+        appuifw.app.body = about_tab.run()
     
 def exit_key_handler():
     app_lock.signal()  # Action to do when user presses exit on first view (functions / about)
@@ -1182,11 +1164,11 @@ def exit_key_handler():
 
 app_lock = e32.Ao_lock()
 file_opener = appuifw.Content_handler()  # Defines an instance of Content_handler for opening files directly
-default_menu = [(u"Open by link", open_by_link.run), (u"About", app2.run_body), (u"Exit", exit_key_handler)]
+default_menu = [(u"Open by link", open_by_link.run), (u"About", about_tab.run_body), (u"Exit", exit_key_handler)]
 appuifw.app.menu = default_menu
 appuifw.app.set_tabs([u"Functions", u"About"], handle_tab)
 appuifw.app.title = u'DedoSurf'
 appuifw.app.screen = "normal"
-appuifw.app.body = app1.run()
+appuifw.app.body = main_tab.run()
 appuifw.app.exit_key_handler = exit_key_handler
 app_lock.wait()
