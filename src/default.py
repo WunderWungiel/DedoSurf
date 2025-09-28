@@ -33,7 +33,7 @@ class API:
         return json.loads(r.read().decode("utf-8"))
 
     def get_app_info(self, link):
-        r = urllib.urlopen(self.api_url + "get_game/?link=%s" % link)
+        r = urllib.urlopen(self.api_url + "get_app_info/?link=%s" % link)
         return json.loads(r.read().decode("utf-8"))
 
     def search(self, query, page):
@@ -423,8 +423,7 @@ class App1:
         def handler(self):
             index = self.results_app.current()
 
-            game_id = self.results_ids[index]
-            game_resolutions = api.get_resolutions(game_id)
+            game_resolutions = api.get_resolutions(self.results_ids[index])
 
             if not len(game_resolutions["resolutions"]) > 0:
                 appuifw.note(u"No resolutions available...")
@@ -434,14 +433,12 @@ class App1:
 
             for key, value in game_resolutions.items():
                 resolutions_names.append(key)
-            
             if device_res in resolutions_names:
-            
-                gameinfo = api.get_app_info(game_id, device_res)
+                gameinfo = api.get_app_info(resolutions_links[resolutions_names.index(device_res)])
                 game_description_view = GameDescriptionView(gameinfo)
                 appuifw.app.view = game_description_view
             else:
-                game_resolutions_view = self.GameResolutionsView(game_id, resolutions_names) # We're actually using resolution names as their IDs
+                game_resolutions_view = self.GameResolutionsView(resolutions_names, resolutions_links)
                 appuifw.app.view = game_resolutions_view
 
         def run(self):
@@ -449,11 +446,11 @@ class App1:
             return self.results_app
 
         class GameResolutionsView(appuifw.View):
-            def __init__(self, game_id, resolutions_names):
+            def __init__(self, resolutions_names, resolutions_links):
                 appuifw.View.__init__(self)
 
                 self.resolutions_names = resolutions_names
-                self.game_id = game_id
+                self.resolutions_links = resolutions_links
 
                 # View Properties
                 self.exit_key_text = u'Back'
@@ -464,7 +461,7 @@ class App1:
 
             def handler(self):
                 index = self.resolutions_app.current()
-                gameinfo = api.get_game(self.game_id, self.resolutions_names[index])
+                gameinfo = api.get_app_info(self.resolutions_links[index])
                 game_description_view = GameDescriptionView(gameinfo)
                 appuifw.app.view = game_description_view
 
