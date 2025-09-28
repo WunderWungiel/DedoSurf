@@ -118,21 +118,6 @@ class GameDescriptionView(appuifw.View):
             except SymbianError:
                 text_app = appuifw.Text(skinned=True)
                 return text_app
-                
-            # img_width, img_height = self.screenshots_app.size
-
-            # height_scale = None
-            # width_scale = None
-            # if height < img_height:
-            #     height_scale = height / img_height
-            # if width < img_width:
-            #     width_scale = width / img_width
-            # if height_scale == None and width_scale == None:
-            #     scale = 0
-            # if height_scale < width_scale:
-            #     scale = height_scale / width_scale
-            # elif width_scale < height_scale:
-            #     scale = width_scale / height_scale
 
     class Download:
         def __init__(self, links, description_ref):
