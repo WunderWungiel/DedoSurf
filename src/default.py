@@ -1187,4 +1187,3 @@ appuifw.app.screen = "normal"
 appuifw.app.body = app1.run()
 appuifw.app.exit_key_handler = exit_key_handler
 app_lock.wait()
-                                           
