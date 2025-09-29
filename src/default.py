@@ -92,7 +92,7 @@ class GameView(appuifw.View):
     def __init__(self, game):
         appuifw.View.__init__(self)
                 
-        self.title = game["title"]
+        self.game_title = game["title"]
         self.description = game["description"]
         self.date = game["date"]
         self.downloads = game["downloads"]
@@ -105,7 +105,7 @@ class GameView(appuifw.View):
         self.exit_key_text = u"Back"
         self.menu = default_menu
         self.set_tabs([u"Info", u"Screenshots", u"Description", u"Links"], self.handle_tab)
-        self.title = u'Info | %s' % self.title
+        self.title = u'Info | %s' % self.game_title
         self.body = self.game_info()
         # End of View Properties
 
@@ -113,7 +113,7 @@ class GameView(appuifw.View):
         info_app = appuifw.Text(scrollbar=True, skinned=True)
         info_app.font = (u"Nokia Sans S60", 25)
         info_app.style = appuifw.STYLE_BOLD
-        info_app.add(self.title)
+        info_app.add(self.game_title)
         info_app.font = (u"Nokia Sans S60", 15)
         info_app.add("\n\nAdded: %s" % self.date)
         info_app.add("\n\nDownloads: %s" % self.downloads)
@@ -166,7 +166,7 @@ class GameView(appuifw.View):
             self.models_names = []
 
             for model in self.models.keys():
-                model = model.replace(description_ref.title, '').strip()
+                model = model.replace(description_ref.game_title, '').strip()
                 self.models_names.append(model)
 
             self.description_ref = description_ref
@@ -238,16 +238,16 @@ class GameView(appuifw.View):
     
     def handle_tab(self, index):
         if index == 0:
-            self.title = 'Info | %s' % self.title
+            self.title = 'Info | %s' % self.game_title
             self.body = self.game_info()
         elif index == 1:
-            self.title = 'Screenshots | %s' % self.title
+            self.title = 'Screenshots | %s' % self.game_title
             self.body = self.AppScreenshots(self.screenshot).run()
         elif index == 2:
-            self.title = 'Description | %s' % self.title
+            self.title = 'Description | %s' % self.game_title
             self.body = self.app_description()
         elif index == 3:
-            self.title = 'Links | %s' % self.title
+            self.title = 'Links | %s' % self.game_title
             self.body = self.Download(self.models, self).run()
 
 class PageChanger:
