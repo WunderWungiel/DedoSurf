@@ -28,11 +28,19 @@ class API:
     def __init__(self):
         self.api_url = "http://192.168.1.5:8080/api/v1/"
 
-    def resolutions(self, game_id):
-        r = urllib.urlopen(self.api_url + "resolutions/?id=%s" % game_id)
+    def resolutions(self): # All resolutions of all games
+        r = urllib.urlopen(self.api_url + "resolutions/")
+        return json.loads(r.read().decode("utf-8"))
+    
+    def resolution(self, resolution, page): # All games for specific resolution
+        r = urllib.urlopen(self.api_url + "resolution/?name=%s&page=%s" % (resolution, page))
         return json.loads(r.read().decode("utf-8"))
 
-    def game(self, game_id, resolution):
+    def game_resolutions(self, game_id): # Resolutions for specific game
+        r = urllib.urlopen(self.api_url + "game/resolutions/?id=%s" % game_id)
+        return json.loads(r.read().decode("utf-8"))
+
+    def game(self, game_id, resolution): # Specific game
         r = urllib.urlopen(self.api_url + "game/?id=%s&resolution=%s" % (game_id, resolution))
         return json.loads(r.read().decode("utf-8"))
 
@@ -40,11 +48,11 @@ class API:
         r = urllib.urlopen(self.api_url + "search/?q=%s&page=%s" % (query, page))
         return json.loads(r.read().decode("utf-8"))
     
-    def vendors(self, page):
+    def vendors(self, page): # All vendors of all games
         r = urllib.urlopen(self.api_url + "vendors/?page=%s" % page)
         return json.loads(r.read().decode("utf-8"))
     
-    def vendor(self, vendor, page):
+    def vendor(self, vendor, page): # All games of specific vendor
         vendor = vendor.replace(" ", "%20")
         r = urllib.urlopen(self.api_url + "vendor/?name=%s&page=%s" % (vendor, page))
         return json.loads(r.read().decode("utf-8"))
@@ -301,7 +309,7 @@ class OpenByLink:
             appuifw.note(u"Not a valid link", "error")
             return
         try:
-            resolutions = api.resolutions(game_id)
+            resolutions = api.game_resolutions(game_id)
         except urllib.URLError:
             appuifw.note(u"Failed fetching info", "error")
             return
@@ -321,7 +329,7 @@ class OpenByLink:
 class MainTab:
     def __init__(self):
         self.entries = [
-            u"Search", u"Vendors", u"Resolutions", u"Nokia Games"
+            u"Search", u"Vendors", u"Resolutions"
         ]
 
     def handler(self):
@@ -344,14 +352,8 @@ class MainTab:
             vendors_view = self.VendorsView()
             appuifw.app.view = vendors_view
         elif index == 2:
-            resolutions_view = self.Resolutions()
+            resolutions_view = self.ResolutionsView()
             appuifw.app.view = resolutions_view
-        elif index == 3:
-            nokia_games_view = self.NokiaGames()
-            if nokia_games_view.skip_res:
-                return
-            else:
-                appuifw.app.view = nokia_games_view
 
     def run(self):
         self.main_tab = appuifw.Listbox(self.entries, self.handler)
@@ -413,8 +415,6 @@ class MainTab:
             elif action == "last":
                 self.page = self.total_pages
 
-            self.previous_page = self.page - 1
-
             response = api.search(self.query, self.page)
             
             self.results_names = []
@@ -445,7 +445,7 @@ class MainTab:
             index = self.results_app.current()
 
             game_id = self.results_ids[index]
-            resolutions = api.resolutions(game_id)
+            resolutions = api.game_resolutions(game_id)
 
             if not len(resolutions) > 0:
                 appuifw.note(u"No resolutions available...")
@@ -623,7 +623,7 @@ class MainTab:
                 index = self.vendor_app.current()
                 game_id = self.results_ids[index]
 
-                resolutions = api.resolutions(game_id)
+                resolutions = api.game_resolutions(game_id)
 
                 if not len(resolutions) > 0:
                     appuifw.note(u"No resolutions available...")
@@ -641,21 +641,11 @@ class MainTab:
                 self.vendor_app = appuifw.Listbox(self.results_names, self.handler)
                 return self.vendor_app
 
-    class Resolutions(appuifw.View):
-        def __init__(self, link):
+    class ResolutionsView(appuifw.View):
+        def __init__(self):
             appuifw.View.__init__(self)
 
-            resolutions_list = api.retrieve_games(link)
-
-            resolutions_names = []
-            resolutions_links = []
-
-            for key, value in resolutions_list.get("results").items():
-                resolutions_names.append(key)
-                resolutions_links.append(value.get("link"))
-            
-            self.resolutions_names = resolutions_names
-            self.resolutions_links = resolutions_links
+            self.resolutions = api.resolutions()
 
             # View Properties
             self.title = u"Resolutions"
@@ -666,337 +656,108 @@ class MainTab:
         
         def handler(self):
             index = self.resolutions_app.current()
-            link = self.resolutions_links[index]
-            self.name = self.resolutions_names[index]
+            resolution = self.resolutions[index]
 
-            resolution_view = self.ResolutionView(self.name, link, self)
+            resolution_view = self.ResolutionView(resolution)
             appuifw.app.view = resolution_view
 
         def run(self):
-            self.resolutions_app = appuifw.Listbox(self.resolutions_names, self.handler)
+            self.resolutions_app = appuifw.Listbox(self.resolutions, self.handler)
             return self.resolutions_app
-
-        class ResolutionView(appuifw.View):
-            def __init__(self, name, link, resolutions_ref):
-                appuifw.View.__init__(self)
-
-                self.name = name
-                self.resolutions_ref = resolutions_ref
-                self.resolutions_app = resolutions_ref.resolutions_app
-                games_list = api.retrieve_games(link)
-                self.games_list = games_list
-
-                games_names = []
-                games_links = []
-
-                for key, value in games_list.get("results").items():
-                    games_names.append(key)
-                    games_links.append(value.get("link"))
-
-                self.games_names = games_names
-                self.games_links = games_links
-
-                # View Properties
-                self.exit_key_text = u"Back"
-
-                if games_list.get("current_page") and games_list.get("next_page") and games_list.get("last_page"):
-                    self.current_page = games_list["current_page"]
-                    self.first_page = games_list["current_page"]
-                    self.next_page = games_list["next_page"]
-                    self.last_page = games_list["last_page"]
-                    pages = True
-                elif games_list.get("current_page") and games_list.get("last_page"):
-                    self.current_page = games_list["current_page"]
-                    self.last_page = games_list["last_page"]
-                    pages = True
-                else:
-                    pages = False
-
-                if pages:
-                    self.menu = [
-                        (u"Next page", self.fetch_next_page),
-                        (u"Last page", self.fetch_last_page)
-                    ] + default_menu
-                    self.title = u"%s | %d" % (self.name, self.current_page[0])
-                else:
-                    self.menu = default_menu
-                    self.title = u'%s' % self.name
-                self.body = self.run()
-                # End of View Properties
-
-            def fetch_page(self, action):
-                if action == "next":
-                    link = self.next_page[1]
-                elif action == "previous":
-                    link = self.previous_page[1]
-                elif action == "first":
-                    link = self.first_page[1]
-                elif action == "last":
-                    link = self.last_page[1]
-
-                if action in ["next", "last", "previous"]:
-                    pattern = re.search(r"/page/(\d+)/?", link)
-                    previous_page_i = int(pattern.group(1)) - 1
-                    previous_link = re.sub(pattern.group(0), '/page/%d' % previous_page_i, link)
-                    self.previous_page = [previous_page_i, previous_link]
-
-                games_list = api.retrieve_games(link)
-                self.games_list = games_list
-
-                games_names = []
-                games_links = []
-
-                for key, value in games_list.get("results").items():
-                    games_names.append(key)
-                    games_links.append(value.get("link"))
-
-                self.games_names = games_names
-                self.games_links = games_links
-
-                if games_list.get("current_page") and games_list.get("next_page"):
-                    self.current_page = games_list["current_page"]
-                    self.next_page = games_list["next_page"]
-                    pages = True
-                elif games_list.get("current_page"):
-                    self.current_page = games_list["current_page"]
-                    pages = True
-                else:
-                    pages = False
-
-                # View Properties
-                if pages and self.current_page[0] != self.last_page[0] and self.current_page[0] != self.first_page[0]:
-                    self.menu = [
-                        (u"Next page", self.fetch_next_page),
-                        (u"First page", self.fetch_first_page),
-                        (u"Previous page", self.fetch_previous_page),
-                        (u"Last page", self.fetch_last_page)
-                    ] + default_menu
-                    self.title = u"%s | %d" % (self.name, self.current_page[0])
-                elif pages and self.current_page[0] == self.first_page[0]:
-                    self.menu = [
-                        (u"Next page", self.fetch_next_page),
-                        (u"Last page", self.fetch_last_page)
-                    ] + default_menu
-                    self.title = u"%s | %d" % (self.name, self.current_page[0])
-                elif pages and self.current_page[0] == self.last_page[0]:
-                    self.menu = [
-                        (u"First page", self.fetch_first_page),
-                        (u"Previous page", self.fetch_previous_page)
-                    ] + default_menu
-                    self.title = u"%s | %d" % (self.name, self.current_page[0])
-                else:
-                    self.menu = default_menu
-                    self.title = u'%s' % self.name
-                self.body = self.run()
-                # End of View Properties
-
-            def fetch_next_page(self):
-                self.fetch_page(action="next")
-
-            def fetch_previous_page(self):
-                self.fetch_page(action="previous")
-
-            def fetch_first_page(self):
-                self.fetch_page(action="first")
-
-            def fetch_last_page(self):
-                self.fetch_page(action="last")
-
-            def handler(self):
-                index = self.resolution_app.current()
-                link = self.games_links[index]
-
-                game = api.game(link)
-                game_description_view = GameDescriptionView(game)
-                appuifw.app.view = game_description_view
-
-            def run(self):
-                self.resolution_app = appuifw.Listbox(self.games_names, self.handler)
-                return self.resolution_app
-
-    class NokiaGames(appuifw.View):
-        def __init__(self, link):
-            appuifw.View.__init__(self)
-
-            resolutions_list = api.retrieve_games(link)
-            resolutions_names = []
-            resolutions_links = []
-
-            for key, value in resolutions_list.get("results").items():
-                resolutions_names.append(key)
-                resolutions_links.append(value.get("link"))
-            if u"All resolutions" in resolutions_names:
-                _current_index = resolutions_names.index(u"All resolutions")
-                _all_res_link = resolutions_links[_current_index]
-                _new_index = 0
-                resolutions_names.pop(_current_index)
-                resolutions_links.pop(_current_index)
-                resolutions_names.insert(_new_index, u"All resolutions")
-                resolutions_links.insert(_new_index, _all_res_link)
-            
-            self.resolutions_names = resolutions_names
-            self.resolutions_links = resolutions_links
-
-            self.skip_res = False
-            if device_resolution in resolutions_names:
-                link = resolutions_links[resolutions_names.index(device_resolution)]
-                resolution_view = self.ResolutionView(device_resolution, link)
-                self.skip_res = True
-                appuifw.app.view = resolution_view
-            else:
-                # View Properties
-                self.title = u"Nokia Games"
-                self.menu = default_menu
-                self.exit_key_text = u"Back"
-                self.body = self.run()
-                # End of View Properties
         
-        def handler(self):
-            index = self.resolutions_app.current()
-            link = self.resolutions_links[index]
-            self.name = self.resolutions_names[index]
-
-            resolution_view = self.ResolutionView(self.name, link)
-            appuifw.app.view = resolution_view
-
-        def run(self):
-            self.resolutions_app = appuifw.Listbox(self.resolutions_names, self.handler)
-            return self.resolutions_app
-
         class ResolutionView(appuifw.View):
-            def __init__(self, name, link):
+            def __init__(self, resolution):
                 appuifw.View.__init__(self)
+                
+                self.page_changer = PageChanger(self.fetch_page)
 
-                self.name = name
-                games_list = api.retrieve_games(link)
-                self.games_list = games_list
+                self.results = True
+                self.resolution = resolution
+                self.page = 1 # Default
 
-                games_names = []
-                games_links = []
+                response = api.resolution(self.resolution, self.page)
+                
+                if not len(response.get("results")) > 0:
+                    appuifw.note(u"No results!")
+                    self.results = False
+                    return
+                
+                self.total_pages = response["total_pages"]
+                
+                self.results_names = []
+                self.results_ids = []
 
-                for key, value in games_list.get("results").items():
-                    games_names.append(key)
-                    games_links.append(value.get("link"))
-
-                self.games_names = games_names
-                self.games_links = games_links
+                for result in response["results"]:
+                    self.results_names.append(result["title"])
+                    self.results_ids.append(result['id'])
 
                 # View Properties
                 self.exit_key_text = u"Back"
 
-                if games_list.get("current_page") and games_list.get("next_page") and games_list.get("last_page"):
-                    self.current_page = games_list["current_page"]
-                    self.first_page = games_list["current_page"]
-                    self.next_page = games_list["next_page"]
-                    self.last_page = games_list["last_page"]
-                    pages = True
-                elif games_list.get("current_page") and games_list.get("last_page"):
-                    self.current_page = games_list["current_page"]
-                    self.last_page = games_list["last_page"]
-                    pages = True
-                else:
-                    pages = False
+                self.exit_key_text = u"Back"
 
-                if pages:
+                if self.total_pages > 0:
+                    self.pages = True
+                else:
+                    self.pages = False
+
+                if self.pages:
                     self.menu = [
-                        (u"Next page", self.fetch_next_page),
-                        (u"Last page", self.fetch_last_page)
-                    ] + default_menu
-                    self.title = u"%s | %d" % (self.name, self.current_page[0])
+                        (u"Next page", self.page_changer.next),
+                        (u"Last page", self.page_changer.last)] + default_menu
+                    self.title = u"%s | %d" % (self.resolution, self.page)
                 else:
                     self.menu = default_menu
-                    self.title = u'%s' % self.name
+                    self.title = u'%s' % self.resolution
                 self.body = self.run()
                 # End of View Properties
 
             def fetch_page(self, action):
                 if action == "next":
-                    link = self.next_page[1]
+                    self.page = self.page + 1
                 elif action == "previous":
-                    link = self.previous_page[1]
+                    self.page = self.page - 1
                 elif action == "first":
-                    link = self.first_page[1]
+                    self.page = 1
                 elif action == "last":
-                    link = self.last_page[1]
+                    self.page = self.total_pages
 
-                if action in ["next", "last", "previous"]:
-                    pattern = re.search(r"/page/(\d+)/?", link)
-                    previous_page_i = int(pattern.group(1)) - 1
-                    previous_link = re.sub(pattern.group(0), '/page/%d' % previous_page_i, link)
-                    self.previous_page = [previous_page_i, previous_link]
+                response = api.resolution(self.resolution, self.page)
 
-                games_list = api.retrieve_games(link)
-                self.games_list = games_list
+                self.results_names = []
+                self.results_ids = []
 
-                games_names = []
-                games_links = []
-
-                for key, value in games_list.get("results").items():
-                    games_names.append(key)
-                    games_links.append(value.get("link"))
-
-                self.games_names = games_names
-                self.games_links = games_links
-
-                if games_list.get("current_page") and games_list.get("next_page"):
-                    self.current_page = games_list["current_page"]
-                    self.next_page = games_list["next_page"]
-                    pages = True
-                elif games_list.get("current_page"):
-                    self.current_page = games_list["current_page"]
-                    pages = True
-                else:
-                    pages = False
+                for result in response["results"]:
+                    self.results_names.append(result["title"])
+                    self.results_ids.append(result['id'])
 
                 # View Properties
-                if pages and self.current_page[0] != self.last_page[0] and self.current_page[0] != self.first_page[0]:
-                    self.menu = [
-                        (u"Next page", self.fetch_next_page),
-                        (u"First page", self.fetch_first_page),
-                        (u"Previous page", self.fetch_previous_page),
-                        (u"Last page", self.fetch_last_page)
-                    ] + default_menu
-                    self.title = u"%s | %d" % (self.name, self.current_page[0])
-                elif pages and self.current_page[0] == self.first_page[0]:
-                    self.menu = [
-                        (u"Next page", self.fetch_next_page),
-                        (u"Last page", self.fetch_last_page)
-                    ] + default_menu
-                    self.title = u"%s | %d" % (self.name, self.current_page[0])
-                elif pages and self.current_page[0] == self.last_page[0]:
-                    self.menu = [
-                        (u"First page", self.fetch_first_page),
-                        (u"Previous page", self.fetch_previous_page)
-                    ] + default_menu
-                    self.title = u"%s | %d" % (self.name, self.current_page[0])
+                if self.pages:
+                    self.menu, self.title = generate_menu(
+                        self.resolution,
+                        self.page,
+                        self.total_pages,
+                        self.page_changer.next,
+                        self.page_changer.first,
+                        self.page_changer.previous,
+                        self.page_changer.last
+                    )
                 else:
                     self.menu = default_menu
-                    self.title = u'%s' % self.name
+                    self.title = u'%s' % self.resolution
                 self.body = self.run()
                 # End of View Properties
 
-            def fetch_next_page(self):
-                self.fetch_page(action="next")
-
-            def fetch_previous_page(self):
-                self.fetch_page(action="previous")
-
-            def fetch_first_page(self):
-                self.fetch_page(action="first")
-
-            def fetch_last_page(self):
-                self.fetch_page(action="last")
-
             def handler(self):
                 index = self.resolution_app.current()
-                link = self.games_links[index]
+                game_id = self.results_ids[index]
 
-                game = api.game(link)
+                game = api.game(game_id, self.resolution)
                 game_description_view = GameDescriptionView(game)
                 appuifw.app.view = game_description_view
 
             def run(self):
-                self.resolution_app = appuifw.Listbox(self.games_names, self.handler)
+                self.resolution_app = appuifw.Listbox(self.results_names, self.handler)
                 return self.resolution_app
 
 class AboutTab:
