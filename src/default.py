@@ -234,6 +234,22 @@ class GameDescriptionView(appuifw.View):
             self.title = 'Links | %s' % self.app_title
             self.body = self.Download(self.download_links, self).run()
 
+class PageChanger:
+    def __init__(self, fetch_page):
+        self.fetch_page = fetch_page
+
+    def next(self):
+        self.fetch_page("next")
+
+    def previous(self):
+        self.fetch_page("previous")
+
+    def first(self):
+        self.fetch_page("first")
+
+    def last(self):
+        self.fetch_page("last")
+
 def close_all_views():
     while appuifw.app.view:
         appuifw.app.view.close()
@@ -339,7 +355,7 @@ class MainTab:
                 return
 
             if not len(query) > 3:
-                appuifw.note(u"Query should be 3-digits or longer", "error")
+                appuifw.note(u"Query should be 4 characters or longer", "error")
                 return
             search_results_view = self.SearchResultsView(query)
             if not search_results_view.results:
@@ -366,6 +382,8 @@ class MainTab:
     class SearchResultsView(appuifw.View):
         def __init__(self, query):
             appuifw.View.__init__(self)
+
+            self.page_changer = PageChanger(self.fetch_page)
 
             self.results = True
             self.query = query
@@ -397,8 +415,8 @@ class MainTab:
 
             if self.pages:
                 self.menu = [
-                    (u"Next page", self.fetch_next_page),
-                    (u"Last page", self.fetch_last_page)] + default_menu
+                    (u"Next page", self.page_changer.next),
+                    (u"Last page", self.page_changer.last)] + default_menu
                 self.title = u"Search results | %d" % self.page
             else:
                 self.menu = default_menu
@@ -407,6 +425,7 @@ class MainTab:
             # End of View Properties
 
         def fetch_page(self, action):
+
             if action == "next":
                 self.page = self.page + 1
             elif action == "previous":
@@ -433,28 +452,16 @@ class MainTab:
                     "Search results",
                     self.page,
                     self.total_pages,
-                    self.fetch_next_page,
-                    self.fetch_first_page,
-                    self.fetch_previous_page,
-                    self.fetch_last_page
+                    self.page_changer.next,
+                    self.page_changer.first,
+                    self.page_changer.previous,
+                    self.page_changer.last
                 )
             else:
                 self.menu = default_menu
                 self.title = u'Search results'
             self.body = self.run()
             # End of View Properties
-
-        def fetch_next_page(self):
-            self.fetch_page(action="next")
-
-        def fetch_previous_page(self):
-            self.fetch_page(action="previous")
-
-        def fetch_first_page(self):
-            self.fetch_page(action="first")
-
-        def fetch_last_page(self):
-            self.fetch_page(action="last")
 
         def handler(self):
             index = self.results_app.current()
@@ -483,6 +490,8 @@ class MainTab:
         def __init__(self):
             appuifw.View.__init__(self)
 
+            self.page_changer = PageChanger(self.fetch_page)
+
             self.results = True
             self.page = 1 # Default
 
@@ -505,8 +514,8 @@ class MainTab:
 
             if self.pages:
                 self.menu = [
-                    (u"Next page", self.fetch_next_page),
-                    (u"Last page", self.fetch_last_page)] + default_menu
+                    (u"Next page", self.page_changer.next),
+                    (u"Last page", self.page_changer.last)] + default_menu
                 self.title = u"Vendors | %d" % self.page
             else:
                 self.menu = default_menu
@@ -533,10 +542,10 @@ class MainTab:
                     "Vendors",
                     self.page,
                     self.total_pages,
-                    self.fetch_next_page,
-                    self.fetch_first_page,
-                    self.fetch_previous_page,
-                    self.fetch_last_page
+                    self.page_changer.next,
+                    self.page_changer.first,
+                    self.page_changer.previous,
+                    self.page_changer.last
                 )
             else:
                 self.menu = default_menu
@@ -544,18 +553,6 @@ class MainTab:
 
             self.body = self.run()
             # End of View Properties
-
-        def fetch_next_page(self):
-            self.fetch_page(action="next")
-
-        def fetch_previous_page(self):
-            self.fetch_page(action="previous")
-
-        def fetch_first_page(self):
-            self.fetch_page(action="first")
-
-        def fetch_last_page(self):
-            self.fetch_page(action="last")
 
         def handler(self):
             index = self.vendors_app.current()
@@ -571,6 +568,8 @@ class MainTab:
         class VendorView(appuifw.View):
             def __init__(self, vendor):
                 appuifw.View.__init__(self)
+
+                self.page_changer = PageChanger(self.fetch_page)
 
                 self.results = True
                 self.vendor = vendor
@@ -597,8 +596,8 @@ class MainTab:
 
                 if self.pages:
                     self.menu = [
-                        (u"Next page", self.fetch_next_page),
-                        (u"Last page", self.fetch_last_page)] + default_menu
+                        (u"Next page", self.page_changer.next),
+                        (u"Last page", self.page_changer.last)] + default_menu
                     self.title = u"%s | %d" % (vendor, self.page)
                 else:
                     self.menu = default_menu
@@ -632,28 +631,16 @@ class MainTab:
                             self.vendor,
                             self.page,
                             self.total_pages,
-                            self.fetch_next_page,
-                            self.fetch_first_page,
-                            self.fetch_previous_page,
-                            self.fetch_last_page
+                            self.page_changer.next,
+                            self.page_changer.first,
+                            self.page_changer.previous,
+                            self.page_changer.last
                         )
                 else:
                     self.menu = default_menu
                     self.title = u'%s' % self.vendor
                 self.body = self.run()
                 # End of View Properties
-
-            def fetch_next_page(self):
-                self.fetch_page(action="next")
-
-            def fetch_previous_page(self):
-                self.fetch_page(action="previous")
-
-            def fetch_first_page(self):
-                self.fetch_page(action="first")
-
-            def fetch_last_page(self):
-                self.fetch_page(action="last")
 
             def handler(self):
                 index = self.vendor_app.current()
