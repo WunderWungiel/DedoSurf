@@ -289,12 +289,19 @@ class OpenByLink:
         link = appuifw.query(u"Input Dedomil Game link", "text")
         if not link:
             return
+        
         close_all_views()
-        if not "dedomil.net/games" in link:
-            appuifw.note(u"Not a Dedomil link", "error")
+
+        game_id = None
+        match = re.search(r"/games/(\d+)/", link)
+        if match:
+            game_id = match.group(1)
+
+        if not game_id:
+            appuifw.note(u"Not a valid link", "error")
             return
         try:
-            resolutions = api.resolutions(link)
+            resolutions = api.resolutions(game_id)
         except urllib.URLError:
             appuifw.note(u"Failed fetching info", "error")
             return
@@ -303,42 +310,13 @@ class OpenByLink:
             appuifw.note(u"No resolutions available...")
             return
 
-        resolutions_names = []
-        resolutions_links = []
-        for key, value in resolutions.items():
-            resolutions_names.append(key)
-            resolutions_links.append(value)
-        if device_resolution in resolutions_names:
-            game = api.game(resolutions_links[resolutions_names.index(device_resolution)])
+        if device_resolution in resolutions:
+            game = api.game(game_id, device_resolution)
             game_description_view = GameDescriptionView(game)
             appuifw.app.view = game_description_view
         else:
-            game_resolutions_view = self.GameResolutionsView(resolutions_names, resolutions_links)
+            game_resolutions_view = GameResolutionsView(game_id, resolutions) # We're actually using resolution names as their IDs
             appuifw.app.view = game_resolutions_view
-
-    class GameResolutionsView(appuifw.View):
-        def __init__(self, resolutions_names, resolutions_links):
-            appuifw.View.__init__(self)
-
-            self.resolutions_names = resolutions_names
-            self.resolutions_links = resolutions_links
-
-            # View Properties
-            self.exit_key_text = u'Back'
-            self.menu = default_menu
-            self.title = u'Resolutions'
-            self.body = self.run()
-            # End of View Properties
-
-        def handler(self):
-            index = self.resolutions_app.current()
-            game = api.game(self.resolutions_links[index])
-            game_description_view = GameDescriptionView(game)
-            appuifw.app.view = game_description_view
-
-        def run(self):
-            self.resolutions_app = appuifw.Listbox(self.resolutions_names, self.handler)
-            return self.resolutions_app
         
 class MainTab:
     def __init__(self):
@@ -474,7 +452,6 @@ class MainTab:
                 return
             
             if device_resolution in resolutions:
-            
                 game = api.game(game_id, device_resolution)
                 game_description_view = GameDescriptionView(game)
                 appuifw.app.view = game_description_view
@@ -663,33 +640,6 @@ class MainTab:
             def run(self):
                 self.vendor_app = appuifw.Listbox(self.results_names, self.handler)
                 return self.vendor_app
-
-        class GameResolutionsView(appuifw.View):
-            def __init__(self, resolutions_names, resolutions_links):
-                appuifw.View.__init__(self)
-
-                self.resolutions_names = resolutions_names
-                self.resolutions_links = resolutions_links
-
-                # View Properties
-
-                self.exit_key_text = u"Back"
-                self.menu = default_menu
-                self.title = u'Resolutions'
-                self.body = self.run()
-
-                # End of View Properties
-
-            def handler(self):
-                index = self.resolutions_app.current()
-
-                game = api.game(self.resolutions_links[index])
-                game_description_view = GameDescriptionView(game)
-                appuifw.app.view = game_description_view
-
-            def run(self):
-                self.resolutions_app = appuifw.Listbox(self.resolutions_names, self.handler)
-                return self.resolutions_app
 
     class Resolutions(appuifw.View):
         def __init__(self, link):
