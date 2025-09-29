@@ -79,14 +79,14 @@ class GameResolutionsView(appuifw.View):
     def handler(self):
         index = self.resolutions_app.current()
         game = api.game(self.game_id, self.resolutions[index])
-        game_description_view = GameDescriptionView(game)
-        appuifw.app.view = game_description_view
+        game_view = GameView(game)
+        appuifw.app.view = game_view
 
     def run(self):
         self.resolutions_app = appuifw.Listbox(self.resolutions, self.handler)
         return self.resolutions_app
 
-class GameDescriptionView(appuifw.View):
+class GameView(appuifw.View):
     def __init__(self, game):
         appuifw.View.__init__(self)
                 
@@ -320,8 +320,8 @@ class OpenByLink:
 
         if device_resolution in resolutions:
             game = api.game(game_id, device_resolution)
-            game_description_view = GameDescriptionView(game)
-            appuifw.app.view = game_description_view
+            game_view = GameView(game)
+            appuifw.app.view = game_view
         else:
             game_resolutions_view = GameResolutionsView(game_id, resolutions) # We're actually using resolution names as their IDs
             appuifw.app.view = game_resolutions_view
@@ -453,8 +453,8 @@ class MainTab:
             
             if device_resolution in resolutions:
                 game = api.game(game_id, device_resolution)
-                game_description_view = GameDescriptionView(game)
-                appuifw.app.view = game_description_view
+                game_view = GameView(game)
+                appuifw.app.view = game_view
             else:
                 game_resolutions_view = GameResolutionsView(game_id, resolutions) # We're actually using resolution names as their IDs
                 appuifw.app.view = game_resolutions_view
@@ -631,8 +631,8 @@ class MainTab:
 
                 if device_resolution in resolutions:
                     game = api.game(game_id, device_resolution)
-                    game_description_view = GameDescriptionView(game)
-                    appuifw.app.view = game_description_view
+                    game_view = GameView(game)
+                    appuifw.app.view = game_view
                 else:
                     game_resolutions_view = GameResolutionsView(game_id, resolutions) # We're actually using resolution names as their IDs
                     appuifw.app.view = game_resolutions_view
@@ -753,8 +753,8 @@ class MainTab:
                 game_id = self.results_ids[index]
 
                 game = api.game(game_id, self.resolution)
-                game_description_view = GameDescriptionView(game)
-                appuifw.app.view = game_description_view
+                game_view = GameView(game)
+                appuifw.app.view = game_view
 
             def run(self):
                 self.resolution_app = appuifw.Listbox(self.results_names, self.handler)
