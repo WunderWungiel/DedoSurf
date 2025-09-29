@@ -18,6 +18,7 @@ def get_drive():
     return drives[-1] + "\\Dedomil"
 
 dl_path = get_drive()
+host = "http://dedo.wunderwungiel.pl/"
 
 if not os.path.isdir(dl_path):
     os.mkdir(dl_path)
@@ -26,7 +27,7 @@ if not os.path.isdir(os.path.join(dl_path, "screenshots")):
 
 class API:
     def __init__(self):
-        self.api_url = "http://192.168.1.5:8080/api/v1/"
+        self.api_url = host + "api/v1/"
 
     def resolutions(self): # All resolutions of all games
         r = urllib.urlopen(self.api_url + "resolutions/")
@@ -45,6 +46,7 @@ class API:
         return json.loads(r.read().decode("utf-8"))
 
     def search(self, query, page):
+        query = urllib.quote(query)
         r = urllib.urlopen(self.api_url + "search/?q=%s&page=%s" % (query, page))
         return json.loads(r.read().decode("utf-8"))
     
@@ -53,7 +55,7 @@ class API:
         return json.loads(r.read().decode("utf-8"))
     
     def vendor(self, vendor, page): # All games of specific vendor
-        vendor = vendor.replace(" ", "%20")
+        vendor = urllib.quote(vendor)
         r = urllib.urlopen(self.api_url + "vendor/?name=%s&page=%s" % (vendor, page))
         return json.loads(r.read().decode("utf-8"))
 
@@ -125,14 +127,16 @@ class GameView(appuifw.View):
         return description_app
 
     class AppScreenshots:
-        def __init__(self, description_ref):
+        def __init__(self, screenshot):
             self.skip = None
-            link = description_ref.screenshot
-            if not link:
+
+            link = host + "static/images/screenshots/" + screenshot
+
+            if not screenshot:
                 self.skip = True
-            parts = link.split('/')
-            filename = parts[-1]
-            path = os.path.join(dl_path, "screenshots", filename)
+                return
+   
+            path = os.path.join(dl_path, "screenshots", screenshot)
             if not os.path.isfile(path):
                 r = urllib.urlopen(link)
                 f = open(path, "wb")
@@ -234,7 +238,7 @@ class GameView(appuifw.View):
             self.body = self.game_info()
         elif index == 1:
             self.title = 'Screenshots | %s' % self.app_title
-            self.body = self.AppScreenshots(self).run()
+            self.body = self.AppScreenshots(self.screenshot).run()
         elif index == 2:
             self.title = 'Description | %s' % self.app_title
             self.body = self.app_description()
