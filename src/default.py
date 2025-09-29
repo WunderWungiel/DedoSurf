@@ -92,11 +92,11 @@ class GameView(appuifw.View):
     def __init__(self, game):
         appuifw.View.__init__(self)
                 
-        self.app_title = game["title"]
+        self.title = game["title"]
         self.description = game["description"]
         self.date = game["date"]
         self.downloads = game["downloads"]
-        self.download_links = game["resolutions"]
+        self.models = game["files"]
         self.vendor = game["vendor"]
         self.splash = game.get("splash")
         self.screenshot = game.get("screenshot")
@@ -105,7 +105,7 @@ class GameView(appuifw.View):
         self.exit_key_text = u"Back"
         self.menu = default_menu
         self.set_tabs([u"Info", u"Screenshots", u"Description", u"Links"], self.handle_tab)
-        self.title = u'Info | %s' % self.app_title
+        self.title = u'Info | %s' % self.title
         self.body = self.game_info()
         # End of View Properties
 
@@ -113,7 +113,7 @@ class GameView(appuifw.View):
         info_app = appuifw.Text(scrollbar=True, skinned=True)
         info_app.font = (u"Nokia Sans S60", 25)
         info_app.style = appuifw.STYLE_BOLD
-        info_app.add(self.app_title)
+        info_app.add(self.title)
         info_app.font = (u"Nokia Sans S60", 15)
         info_app.add("\n\nAdded: %s" % self.date)
         info_app.add("\n\nDownloads: %s" % self.downloads)
@@ -130,7 +130,7 @@ class GameView(appuifw.View):
         def __init__(self, screenshot):
             self.skip = None
 
-            link = host + "static/images/screenshots/" + screenshot
+            url = host + "static/images/screenshots/" + screenshot
 
             if not screenshot:
                 self.skip = True
@@ -138,7 +138,7 @@ class GameView(appuifw.View):
    
             path = os.path.join(dl_path, "screenshots", screenshot)
             if not os.path.isfile(path):
-                r = urllib.urlopen(link)
+                r = urllib.urlopen(url)
                 f = open(path, "wb")
                 f.write(r.read())
                 f.close()
@@ -161,39 +161,41 @@ class GameView(appuifw.View):
                 return text_app
 
     class Download:
-        def __init__(self, links, description_ref):
-            self.links = links
+        def __init__(self, models, description_ref):
+            self.models = models
+            self.models_names = []
+
+            for model in self.models.keys():
+                model = model.replace(description_ref.title, '').strip()
+                self.models_names.append(model)
+
             self.description_ref = description_ref
-
-            links_names = []
-            links_links = []
-
-            for key, value in links.items():
-                if key.find(description_ref.app_title) != -1:
-                    key = key.replace(description_ref.app_title, '').strip()
-                links_names.append(key)
-                links_links.append(value.get('link'))
-
-            self.links_names = links_names
-            self.links_links = links_links
 
         def handler(self):
             index = self.download_app.current()
-            link = self.links_links[index]
+            files = self.models[list(self.models.keys())[index]] # Get the files array from self.models using current index
+            filenames = [file['filename'] for file in files]
+
+            choice = appuifw.selection_list(choices=filenames)
+            if choice == None:
+                return
+
+            self.download(files[choice])
+            
+        def download(self, file):
             try:
-                response = urllib.urlopen(link)
+                url = host + "static/files/" + file['filename']
+                response = urllib.urlopen(url)
             except urllib.HTTPError:
                 appuifw.note(u"Error while downloading game", "error")
                 return
             except urllib.URLError:
                 appuifw.note(u"Error while downloading game", "error")
                 return
-            content_disposition = response.headers.get("Content-Disposition")
-            filename = re.findall("filename=(.+)", content_disposition)[0]
-            filename = filename.replace('"', '')
-            path = os.path.join(dl_path, filename)
+            
+            path = os.path.join(dl_path, file['filename'])
 
-            appuifw.note(u"Wait... Downloading %s" % filename)
+            appuifw.note(u"Wait... Downloading %s" % file['filename'])
             f = open(path, "wb")
             while True:
                 chunk = response.read(1024)
@@ -202,14 +204,15 @@ class GameView(appuifw.View):
                 f.write(chunk)
             f.close()
 
-            full_jar_path = None
+            nested_path = None
             interrupted = False
-            if filename.endswith(".zip"):
+            
+            if file['type'] == 'download':
                 zip_file = zipfile.ZipFile(path, 'r')
                 for name in zip_file.namelist():
                     if name.endswith(".jar"):
-                        full_jar_path = os.path.join(dl_path, name)
-                        extracted = open(full_jar_path, "wb")
+                        nested_path = os.path.join(dl_path, name)
+                        extracted = open(nested_path, "wb")
                         try:
                             extracted.write(zip_file.read(name))
                             extracted.close()
@@ -219,32 +222,33 @@ class GameView(appuifw.View):
                             break
                         break
                 zip_file.close()
+            
             if interrupted:
-                os.remove(full_jar_path)
+                os.remove(nested_path)
                 file_opener.open(path)
-            elif not full_jar_path and not interrupted:
-                file_opener.open(path)
-            elif full_jar_path and not interrupted:
-                os.remove(path)
-                file_opener.open(full_jar_path)
+            else:
+                if nested_path:
+                    file_opener.open(nested_path)
+                else:
+                    file_opener.open(path)
 
         def run(self):
-            self.download_app = appuifw.Listbox(self.links_names, self.handler)
+            self.download_app = appuifw.Listbox(self.models_names, self.handler)
             return self.download_app
     
     def handle_tab(self, index):
         if index == 0:
-            self.title = 'Info | %s' % self.app_title
+            self.title = 'Info | %s' % self.title
             self.body = self.game_info()
         elif index == 1:
-            self.title = 'Screenshots | %s' % self.app_title
+            self.title = 'Screenshots | %s' % self.title
             self.body = self.AppScreenshots(self.screenshot).run()
         elif index == 2:
-            self.title = 'Description | %s' % self.app_title
+            self.title = 'Description | %s' % self.title
             self.body = self.app_description()
         elif index == 3:
-            self.title = 'Links | %s' % self.app_title
-            self.body = self.Download(self.download_links, self).run()
+            self.title = 'Links | %s' % self.title
+            self.body = self.Download(self.models, self).run()
 
 class PageChanger:
     def __init__(self, fetch_page):
